@@ -1,0 +1,399 @@
+{
+  "entry_filter": "chg<3 + ema<1 + sc>40",
+  "exit_rules": {
+    "tp_pct": 3.0,
+    "sl_pct": 1.5,
+    "trail_pct": 0.0,
+    "max_hold_bars": 360
+  },
+  "performance": {
+    "trades": 20,
+    "wins": 17,
+    "losses": 3,
+    "wr": 0.85,
+    "avg_pnl": 0.016091219438324176,
+    "total_pnl": 0.32182438876648356,
+    "sharpe": 1.0403946772718802,
+    "avg_hold_bars": 264.55,
+    "by_reason": {
+      "TP": 10,
+      "SL": 2,
+      "TRAIL": 0,
+      "STALE": 8
+    }
+  },
+  "top_filters": [
+    {
+      "trades": 40,
+      "wins": 17,
+      "losses": 23,
+      "wr": 0.425,
+      "avg_pnl": 0.002998250000000005,
+      "total_pnl": 0.11993000000000018,
+      "sharpe": 0.3034077437182666,
+      "avg_hold_bars": 45.25,
+      "by_reason": {
+        "TP": 17,
+        "SL": 23,
+        "TRAIL": 0,
+        "STALE": 0
+      },
+      "filter": "chg<3 + ema<1 + sc>40"
+    },
+    {
+      "trades": 47,
+      "wins": 20,
+      "losses": 27,
+      "wr": 0.425531914893617,
+      "avg_pnl": 0.0028850575267823607,
+      "total_pnl": 0.13559770375877095,
+      "sharpe": 0.2951545855658535,
+      "avg_hold_bars": 43.191489361702125,
+      "by_reason": {
+        "TP": 19,
+        "SL": 27,
+        "TRAIL": 0,
+        "STALE": 1
+      },
+      "filter": "rsi<40 + ema<1 + sc>40"
+    },
+    {
+      "trades": 61,
+      "wins": 24,
+      "losses": 37,
+      "wr": 0.39344262295081966,
+      "avg_pnl": 0.0023674180327868982,
+      "total_pnl": 0.1444125000000008,
+      "sharpe": 0.24242952432115125,
+      "avg_hold_bars": 36.0,
+      "by_reason": {
+        "TP": 24,
+        "SL": 37,
+        "TRAIL": 0,
+        "STALE": 0
+      },
+      "filter": "chg<3 + ema<3 + sc>40"
+    },
+    {
+      "trades": 57,
+      "wins": 23,
+      "losses": 34,
+      "wr": 0.40350877192982454,
+      "avg_pnl": 0.002322143686291826,
+      "total_pnl": 0.1323621901186341,
+      "sharpe": 0.24359148680442488,
+      "avg_hold_bars": 52.578947368421055,
+      "by_reason": {
+        "TP": 21,
+        "SL": 33,
+        "TRAIL": 0,
+        "STALE": 3
+      },
+      "filter": "rsi<50 + ema<1 + sc>40"
+    },
+    {
+      "trades": 60,
+      "wins": 23,
+      "losses": 37,
+      "wr": 0.38333333333333336,
+      "avg_pnl": 0.0021653333333333472,
+      "total_pnl": 0.12992000000000084,
+      "sharpe": 0.22279140778195006,
+      "avg_hold_bars": 36.28333333333333,
+      "by_reason": {
+        "TP": 23,
+        "SL": 37,
+        "TRAIL": 0,
+        "STALE": 0
+      },
+      "filter": "chg<3 + ema<2 + sc>40"
+    },
+    {
+      "trades": 64,
+      "wins": 26,
+      "losses": 38,
+      "wr": 0.40625,
+      "avg_pnl": 0.002113117579110012,
+      "total_pnl": 0.1352395250630408,
+      "sharpe": 0.22251243402574647,
+      "avg_hold_bars": 45.375,
+      "by_reason": {
+        "TP": 23,
+        "SL": 38,
+        "TRAIL": 0,
+        "STALE": 3
+      },
+      "filter": "vr>5 + ema<1 + sc>40"
+    },
+    {
+      "trades": 52,
+      "wins": 21,
+      "losses": 31,
+      "wr": 0.40384615384615385,
+      "avg_pnl": 0.00194729855890463,
+      "total_pnl": 0.10125952506304076,
+      "sharpe": 0.20706810781564006,
+      "avg_hold_bars": 53.94230769230769,
+      "by_reason": {
+        "TP": 18,
+        "SL": 31,
+        "TRAIL": 0,
+        "STALE": 3
+      },
+      "filter": "vr<25 + ema<1 + sc>40"
+    },
+    {
+      "trades": 63,
+      "wins": 25,
+      "losses": 38,
+      "wr": 0.3968253968253968,
+      "avg_pnl": 0.0019166194454450893,
+      "total_pnl": 0.12074702506304065,
+      "sharpe": 0.202994469841305,
+      "avg_hold_bars": 49.77777777777778,
+      "by_reason": {
+        "TP": 22,
+        "SL": 38,
+        "TRAIL": 0,
+        "STALE": 3
+      },
+      "filter": "chg<8 + ema<1 + sc>40"
+    },
+    {
+      "trades": 91,
+      "wins": 33,
+      "losses": 58,
+      "wr": 0.3626373626373626,
+      "avg_pnl": 0.0017516208791208967,
+      "total_pnl": 0.15939750000000158,
+      "sharpe": 0.18226267702068158,
+      "avg_hold_bars": 23.406593406593405,
+      "by_reason": {
+        "TP": 33,
+        "SL": 58,
+        "TRAIL": 0,
+        "STALE": 0
+      },
+      "filter": "chg<3 + rsi<50 + sc>40"
+    },
+    {
+      "trades": 59,
+      "wins": 23,
+      "losses": 36,
+      "wr": 0.3898305084745763,
+      "avg_pnl": 0.001741644492593911,
+      "total_pnl": 0.10275702506304077,
+      "sharpe": 0.1857284922840503,
+      "avg_hold_bars": 53.05084745762712,
+      "by_reason": {
+        "TP": 20,
+        "SL": 36,
+        "TRAIL": 0,
+        "STALE": 3
+      },
+      "filter": "chg<5 + ema<1 + sc>40"
+    }
+  ],
+  "top_exits": [
+    {
+      "trades": 20,
+      "wins": 17,
+      "losses": 3,
+      "wr": 0.85,
+      "avg_pnl": 0.016091219438324176,
+      "total_pnl": 0.32182438876648356,
+      "sharpe": 1.0403946772718802,
+      "avg_hold_bars": 264.55,
+      "by_reason": {
+        "TP": 10,
+        "SL": 2,
+        "TRAIL": 0,
+        "STALE": 8
+      },
+      "tp": 3.0,
+      "sl": 1.5,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 27,
+      "wins": 19,
+      "losses": 8,
+      "wr": 0.7037037037037037,
+      "avg_pnl": 0.011798809396565035,
+      "total_pnl": 0.318567853707256,
+      "sharpe": 0.685866344263937,
+      "avg_hold_bars": 203.11111111111111,
+      "by_reason": {
+        "TP": 12,
+        "SL": 8,
+        "TRAIL": 0,
+        "STALE": 7
+      },
+      "tp": 3.0,
+      "sl": 1.0,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 23,
+      "wins": 18,
+      "losses": 5,
+      "wr": 0.782608695652174,
+      "avg_pnl": 0.011176757742629674,
+      "total_pnl": 0.2570654280804825,
+      "sharpe": 0.8350870153552692,
+      "avg_hold_bars": 183.69565217391303,
+      "by_reason": {
+        "TP": 15,
+        "SL": 4,
+        "TRAIL": 0,
+        "STALE": 4
+      },
+      "tp": 2.0,
+      "sl": 1.5,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 29,
+      "wins": 19,
+      "losses": 10,
+      "wr": 0.6551724137931034,
+      "avg_pnl": 0.011122454603013853,
+      "total_pnl": 0.32255118348740186,
+      "sharpe": 0.6730535168323406,
+      "avg_hold_bars": 184.13793103448276,
+      "by_reason": {
+        "TP": 12,
+        "SL": 10,
+        "TRAIL": 0,
+        "STALE": 7
+      },
+      "tp": 3.0,
+      "sl": 0.75,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 26,
+      "wins": 19,
+      "losses": 7,
+      "wr": 0.7307692307692307,
+      "avg_pnl": 0.010334454367460487,
+      "total_pnl": 0.26869581355397265,
+      "sharpe": 0.7949660480784443,
+      "avg_hold_bars": 151.19230769230768,
+      "by_reason": {
+        "TP": 16,
+        "SL": 7,
+        "TRAIL": 0,
+        "STALE": 3
+      },
+      "tp": 2.0,
+      "sl": 1.0,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 26,
+      "wins": 22,
+      "losses": 4,
+      "wr": 0.8461538461538461,
+      "avg_pnl": 0.00987942307692304,
+      "total_pnl": 0.25686499999999896,
+      "sharpe": 0.9131866267581095,
+      "avg_hold_bars": 106.92307692307692,
+      "by_reason": {
+        "TP": 22,
+        "SL": 4,
+        "TRAIL": 0,
+        "STALE": 0
+      },
+      "tp": 1.5,
+      "sl": 1.5,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 28,
+      "wins": 19,
+      "losses": 9,
+      "wr": 0.6785714285714286,
+      "avg_pnl": 0.009649805841213324,
+      "total_pnl": 0.2701945635539731,
+      "sharpe": 0.772615546397587,
+      "avg_hold_bars": 131.85714285714286,
+      "by_reason": {
+        "TP": 16,
+        "SL": 9,
+        "TRAIL": 0,
+        "STALE": 3
+      },
+      "tp": 2.0,
+      "sl": 0.75,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 30,
+      "wins": 24,
+      "losses": 6,
+      "wr": 0.8,
+      "avg_pnl": 0.009494999999999958,
+      "total_pnl": 0.2848499999999987,
+      "sharpe": 0.949974987493746,
+      "avg_hold_bars": 78.66666666666667,
+      "by_reason": {
+        "TP": 24,
+        "SL": 6,
+        "TRAIL": 0,
+        "STALE": 0
+      },
+      "tp": 1.5,
+      "sl": 1.0,
+      "trail": 0.0,
+      "max_hold": 240
+    },
+    {
+      "trades": 30,
+      "wins": 24,
+      "losses": 6,
+      "wr": 0.8,
+      "avg_pnl": 0.009494999999999958,
+      "total_pnl": 0.2848499999999987,
+      "sharpe": 0.949974987493746,
+      "avg_hold_bars": 78.66666666666667,
+      "by_reason": {
+        "TP": 24,
+        "SL": 6,
+        "TRAIL": 0,
+        "STALE": 0
+      },
+      "tp": 1.5,
+      "sl": 1.0,
+      "trail": 0.0,
+      "max_hold": 360
+    },
+    {
+      "trades": 26,
+      "wins": 21,
+      "losses": 5,
+      "wr": 0.8076923076923077,
+      "avg_pnl": 0.009233934670385906,
+      "total_pnl": 0.24008230143003348,
+      "sharpe": 0.8377070184168455,
+      "avg_hold_bars": 102.73076923076923,
+      "by_reason": {
+        "TP": 21,
+        "SL": 4,
+        "TRAIL": 0,
+        "STALE": 1
+      },
+      "tp": 1.5,
+      "sl": 1.5,
+      "trail": 0.0,
+      "max_hold": 240
+    }
+  ]
+}

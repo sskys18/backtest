@@ -169,5 +169,20 @@ def train(
     typer.echo(json.dumps(result, indent=2, default=str))
 
 
+# ── bt replay ───────────────────────────────────────────────────────────
+
+@app.command("replay")
+def replay_cmd(
+    log: str = typer.Option(..., help="Path to trades.jsonl"),
+    ohlcv_dir: str = typer.Option("data/raw", help="OHLCV data directory"),
+    output: str = typer.Option(None, help="Output JSON path"),
+) -> None:
+    """Run scan replay optimization — find best entry filters + exit params."""
+    from bt.replay.optimize import full_optimize
+
+    result = full_optimize(log, ohlcv_dir, output)
+    typer.echo(json.dumps(result, indent=2, default=str))
+
+
 if __name__ == "__main__":
     app()
