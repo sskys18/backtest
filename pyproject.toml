@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "bt"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "polars>=1.0",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "pydantic>=2.0",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+bt = "bt.cli:app"
+
+[tool.maturin]
+python-source = "src"
+module-name = "bt.bt_engine"
+features = ["python"]
+manifest-path = "crates/bt-engine/Cargo.toml"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python"]

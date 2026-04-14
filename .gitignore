@@ -1,0 +1,29 @@
+# Rust
+target/
+*.so
+*.dylib
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Data (large files)
+data/raw/
+data/records/
+data/features/
+
+# Experiments (generated)
+experiments/runs/
+experiments/leaderboard.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Environment
+.env

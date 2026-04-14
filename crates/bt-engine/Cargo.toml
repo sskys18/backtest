@@ -1,0 +1,20 @@
+[package]
+name = "bt-engine"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "bt_engine"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+python = ["dep:pyo3", "pyo3/extension-module", "dep:numpy"]
+
+[dependencies]
+pyo3 = { version = "0.28", optional = true }
+numpy = { version = "0.28", optional = true }
+thiserror = "2"
+
+[dev-dependencies]
+approx = "0.5"
