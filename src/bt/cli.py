@@ -13,6 +13,51 @@ data_app = typer.Typer(name="data", help="Data management commands", no_args_is_
 app.add_typer(data_app, name="data")
 
 
+# ── bt data fetch ─────────────────────────────────────────────────────────────
+
+@data_app.command("fetch")
+def data_fetch(
+    pair: str = typer.Option(..., help="Trading pair (e.g., BTC-USDT, BTC-KRW)"),
+    source: str = typer.Option(..., help="Data source (binance, bithumb, upbit)"),
+    data_type: str = typer.Option("ohlcv", "--type", help="Data type (ohlcv, funding, oi, trades)"),
+    timeframe: str = typer.Option("1h", help="Bar timeframe (1m, 5m, 15m, 1h, 4h, 1d)"),
+    start: str = typer.Option("2024-01-01", help="Start date (ISO format)"),
+    end: str = typer.Option("2025-01-01", help="End date (ISO format)"),
+    output: str = typer.Option(None, help="Output path (auto-generated if omitted)"),
+) -> None:
+    """Fetch market data from an exchange."""
+    from bt.data.fetch import fetch_data
+
+    result = fetch_data(pair, source, data_type, timeframe, start, end, output)
+    typer.echo(json.dumps(result, indent=2, default=str))
+    if result["status"] != "ok":
+        raise typer.Exit(code=1)
+
+
+# ── bt data list ──────────────────────────────────────────────────────────────
+
+@data_app.command("list")
+def data_list() -> None:
+    """List all datasets in the data store."""
+    from bt.config import find_project_root
+
+    root = find_project_root()
+    raw_dir = root / "data" / "raw"
+    datasets = []
+
+    if raw_dir.exists():
+        for pq in sorted(raw_dir.rglob("*.parquet")):
+            rel = pq.relative_to(raw_dir)
+            parts = rel.parts
+            datasets.append({
+                "path": str(pq),
+                "relative": str(rel),
+                "source": parts[0] if len(parts) > 0 else "unknown",
+            })
+
+    typer.echo(json.dumps({"datasets": datasets, "count": len(datasets)}, indent=2))
+
+
 # ── bt data validate ──────────────────────────────────────────────────────────
 
 @data_app.command("validate")
