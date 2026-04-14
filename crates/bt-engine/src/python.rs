@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::engine::BacktestEngine as RustEngine;
+use crate::step::StepEngine as RustStepEngine;
 use crate::types::*;
 
 #[pyclass(name = "BacktestEngine")]
@@ -142,8 +143,106 @@ impl PyBacktestEngine {
     }
 }
 
+#[pyclass(name = "StepEngine")]
+pub struct PyStepEngine {
+    inner: RustStepEngine,
+}
+
+#[pymethods]
+impl PyStepEngine {
+    #[new]
+    fn new(
+        initial_capital: f64,
+        broker: &Bound<'_, PyDict>,
+        risk: &Bound<'_, PyDict>,
+        bars_per_year: f64,
+        timestamps: PyReadonlyArray1<'_, i64>,
+        opens: PyReadonlyArray1<'_, f64>,
+        highs: PyReadonlyArray1<'_, f64>,
+        lows: PyReadonlyArray1<'_, f64>,
+        closes: PyReadonlyArray1<'_, f64>,
+        volumes: PyReadonlyArray1<'_, f64>,
+    ) -> PyResult<Self> {
+        let slippage_bps: f64 = broker.get_item("slippage_bps")?.unwrap().extract()?;
+        let fee_rate: f64 = broker.get_item("fee_rate")?.unwrap().extract()?;
+        let fill_model_str: String = broker.get_item("fill_model")?.unwrap().extract()?;
+        let fill_model = match fill_model_str.as_str() {
+            "immediate" => FillModel::Immediate,
+            "next_bar" => FillModel::NextBar,
+            other => return Err(pyo3::exceptions::PyValueError::new_err(
+                format!("invalid fill_model: '{}'", other),
+            )),
+        };
+        let max_position_size: f64 = risk.get_item("max_position_size")?.unwrap().extract()?;
+        let max_drawdown_halt: f64 = risk.get_item("max_drawdown_halt")?.unwrap().extract()?;
+        let signal_threshold: f64 = risk.get_item("signal_threshold")?.unwrap().extract()?;
+
+        let config = EngineConfig {
+            initial_capital,
+            broker: BrokerConfig { slippage_bps, fee_rate, fill_model },
+            risk: RiskConfig { max_position_size, max_drawdown_halt, signal_threshold },
+            bars_per_year,
+        };
+
+        let ts = timestamps.as_slice()?;
+        let o = opens.as_slice()?;
+        let h = highs.as_slice()?;
+        let l = lows.as_slice()?;
+        let c = closes.as_slice()?;
+        let v = volumes.as_slice()?;
+        let bars: Vec<Bar> = (0..ts.len()).map(|i| Bar {
+            timestamp: ts[i], open: o[i], high: h[i], low: l[i], close: c[i], volume: v[i],
+        }).collect();
+
+        let inner = RustStepEngine::new(config, bars)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+        Ok(Self { inner })
+    }
+
+    fn reset<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let obs = self.inner.reset();
+        Self::obs_to_dict(py, &obs)
+    }
+
+    fn step<'py>(&mut self, py: Python<'py>, strength: f64, target_size: f64) -> PyResult<Bound<'py, PyDict>> {
+        let result = self.inner.step(strength, target_size);
+        let dict = PyDict::new(py);
+        dict.set_item("obs", Self::obs_to_dict(py, &result.obs)?)?;
+        dict.set_item("reward", result.reward)?;
+        dict.set_item("done", result.done)?;
+        dict.set_item("truncated", result.truncated)?;
+        Ok(dict)
+    }
+
+    fn num_bars(&self) -> usize {
+        self.inner.num_bars()
+    }
+}
+
+impl PyStepEngine {
+    fn obs_to_dict<'py>(py: Python<'py>, obs: &crate::step::StepObs) -> PyResult<Bound<'py, PyDict>> {
+        let d = PyDict::new(py);
+        d.set_item("open", obs.open)?;
+        d.set_item("high", obs.high)?;
+        d.set_item("low", obs.low)?;
+        d.set_item("close", obs.close)?;
+        d.set_item("volume", obs.volume)?;
+        d.set_item("equity", obs.equity)?;
+        d.set_item("cash", obs.cash)?;
+        d.set_item("position_qty", obs.position_qty)?;
+        d.set_item("position_entry_price", obs.position_entry_price)?;
+        d.set_item("unrealized_pnl", obs.unrealized_pnl)?;
+        d.set_item("drawdown", obs.drawdown)?;
+        d.set_item("step", obs.step)?;
+        d.set_item("halted", obs.halted)?;
+        Ok(d)
+    }
+}
+
 #[pymodule]
 fn bt_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBacktestEngine>()?;
+    m.add_class::<PyStepEngine>()?;
     Ok(())
 }

@@ -19,6 +19,7 @@ INDICATOR_REGISTRY: dict[str, IndicatorFn] = {
     "vwap": indicators.vwap,
     "premium": indicators.premium,
     "funding_ma": indicators.funding_ma,
+    "forecast": indicators.forecast,
 }
 
 
@@ -41,5 +42,7 @@ def apply_indicator(
         return fn(df, input_cols=input_col, output_col=output_col or "premium", **params)
     elif name == "vwap":
         return fn(df, output_col=output_col or "vwap", **params)
+    elif name == "forecast":
+        return fn(df, input_col=input_col, output_col=output_col, **params)
     else:
         return fn(df, input_col=input_col, output_col=output_col or f"{name}_{params.get('period', '')}", **params)

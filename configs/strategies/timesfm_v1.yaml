@@ -1,0 +1,23 @@
+strategy:
+  name: timesfm_signal
+  params:
+    entry_threshold: 0.005
+    exit_threshold: 0.0
+    position_size: 0.15
+    forecast_col: forecast_return
+
+backtest:
+  pair: "BTC-USDT"
+  timeframe: "1h"
+  initial_capital: 10000.0
+  data_path: "data/features/BTC-USDT-1h-forecast.parquet"
+
+broker:
+  slippage_bps: 5.0
+  fee_rate: 0.001
+  fill_model: "next_bar"
+
+risk:
+  max_position_size: 0.20
+  max_drawdown_halt: 0.15
+  signal_threshold: 0.5

@@ -81,3 +81,12 @@ def funding_ma(
 ) -> pl.DataFrame:
     """Moving average of funding rate."""
     return sma(df, input_col, period, output_col)
+
+
+def forecast(
+    df: pl.DataFrame, input_col: str, context_length: int, horizon: int,
+    output_col: str | None = None,
+) -> pl.DataFrame:
+    """TimesFM forecast indicator — delegates to timesfm_forecast module."""
+    from bt.features.timesfm_forecast import generate_forecasts
+    return generate_forecasts(df, input_col, context_length, horizon)

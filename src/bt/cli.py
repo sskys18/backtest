@@ -154,5 +154,20 @@ def strategy_list() -> None:
     typer.echo(json.dumps(strategies, indent=2))
 
 
+# ── bt train ─────────────────────────────────────────────────────────────
+
+@app.command("train")
+def train(
+    data_path: str = typer.Option(..., help="Path to feature parquet"),
+    output: str = typer.Option("models/ppo", help="Output directory for model"),
+    timesteps: int = typer.Option(100_000, help="Total training timesteps"),
+    seed: int = typer.Option(42, help="Random seed"),
+) -> None:
+    """Train a PPO agent on historical data."""
+    from bt.rl.train import train_ppo
+    result = train_ppo(data_path, output, timesteps, seed=seed)
+    typer.echo(json.dumps(result, indent=2, default=str))
+
+
 if __name__ == "__main__":
     app()

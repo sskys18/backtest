@@ -9,6 +9,7 @@ import yaml
 
 from bt.backtest import run_backtest
 from bt.config import load_config
+from bt.optimize.bayesian import BayesianOptimizer
 from bt.optimize.grid import GridSearchOptimizer, RandomSearchOptimizer
 
 
@@ -50,6 +51,8 @@ def run_optimize(
 
     if method == "random":
         optimizer = RandomSearchOptimizer()
+    elif method == "bayesian":
+        optimizer = BayesianOptimizer()
     else:
         optimizer = GridSearchOptimizer()
 
