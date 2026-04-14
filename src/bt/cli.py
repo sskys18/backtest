@@ -1,0 +1,113 @@
+"""bt CLI — Typer dispatcher for all subcommands."""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import typer
+
+app = typer.Typer(name="bt", help="Crypto backtesting framework", no_args_is_help=True)
+data_app = typer.Typer(name="data", help="Data management commands", no_args_is_help=True)
+app.add_typer(data_app, name="data")
+
+
+# ── bt data validate ──────────────────────────────────────────────────────────
+
+@data_app.command("validate")
+def data_validate(
+    path: str = typer.Option(..., help="Path to data directory or parquet file"),
+) -> None:
+    """Validate data quality against canonical schemas."""
+    from bt.data.validate import validate_path
+
+    report = validate_path(Path(path))
+    typer.echo(json.dumps(report, indent=2))
+    if not report["valid"]:
+        raise typer.Exit(code=1)
+
+
+# ── bt data import ────────────────────────────────────────────────────────────
+
+@data_app.command("import")
+def data_import(
+    path: str = typer.Option(..., help="Path to CSV or Parquet file"),
+    data_type: str = typer.Option(..., "--type", help="Data type (ohlcv, funding, records, etc.)"),
+    output: str = typer.Option(None, help="Output path (auto-generated if omitted)"),
+) -> None:
+    """Import CSV/Parquet data into the data store."""
+    from bt.data.import_ import import_file
+
+    result = import_file(Path(path), data_type, Path(output) if output else None)
+    typer.echo(json.dumps(result, indent=2))
+
+
+# ── bt features build ─────────────────────────────────────────────────────────
+
+@app.command("features")
+def features_build(
+    config: str = typer.Option(..., "--config", help="Path to features.yaml"),
+) -> None:
+    """Build feature DataFrame from multiple data sources."""
+    from bt.features.build import build_features
+
+    result = build_features(Path(config))
+    typer.echo(json.dumps(result, indent=2))
+
+
+# ── bt backtest ───────────────────────────────────────────────────────────────
+
+@app.command("backtest")
+def backtest(
+    config: str = typer.Option(..., "--config", help="Path to strategy config YAML"),
+) -> None:
+    """Run a backtest. Config is single source of truth."""
+    from bt.backtest import run_backtest
+
+    result = run_backtest(Path(config))
+    typer.echo(json.dumps(result, indent=2, default=str))
+
+
+# ── bt report ─────────────────────────────────────────────────────────────────
+
+@app.command("report")
+def report(
+    run_id: str = typer.Option(..., "--run-id", help="Run ID to report on"),
+) -> None:
+    """Generate a report for a backtest run."""
+    from bt.report.generate import generate_report
+
+    result = generate_report(run_id)
+    typer.echo(json.dumps(result, indent=2, default=str))
+
+
+# ── bt optimize ───────────────────────────────────────────────────────────────
+
+@app.command("optimize")
+def optimize(
+    config: str = typer.Option(..., "--config", help="Base config YAML"),
+    space: str = typer.Option(..., "--space", help="Search space YAML"),
+    method: str = typer.Option("grid", "--method", help="Optimization method: grid or random"),
+    budget: int = typer.Option(100, "--budget", help="Max number of evaluations"),
+) -> None:
+    """Run parameter optimization over a search space."""
+    from bt.optimize.run import run_optimize
+
+    result = run_optimize(Path(config), Path(space), method, budget)
+    typer.echo(json.dumps(result, indent=2, default=str))
+
+
+# ── bt strategy list ──────────────────────────────────────────────────────────
+
+@app.command("strategies")
+def strategy_list() -> None:
+    """List registered strategies."""
+    from bt.strategy.registry import STRATEGY_REGISTRY
+
+    strategies = [{"name": name, "class": cls.__name__} for name, cls in STRATEGY_REGISTRY.items()]
+    typer.echo(json.dumps(strategies, indent=2))
+
+
+if __name__ == "__main__":
+    app()
