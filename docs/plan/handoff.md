@@ -1,75 +1,86 @@
 # Session Handoff
-> Generated: 2026-04-14 01:30
+> Updated: 2026-04-17
 
 ## Task
-Build a hybrid Rust+Python crypto backtesting framework (`bt` CLI) with autonomous Claude Code experiment loop.
+Build a hybrid Rust+Python crypto backtesting framework (`bt` CLI) with scan replay signal optimization for Korean exchange altcoin trading.
 
-## Status
-### Completed
-- Full design spec: `docs/specs/2026-04-13-backtest-system-design.md` (~1100 lines, reviewed 3x by Codex, all blockers fixed)
-- **Plan A (Rust engine)**: All 7 work streams implemented and tested
-  - types, broker, portfolio, risk, tick, engine, PyO3 bindings
-  - 23 Rust tests passing, 3 Python integration tests passing
-  - Adapted: PyO3 0.23→0.28, numpy 0.23→0.28 for Python 3.14 compat
-  - Adapted: Python module gated behind `python` feature flag for clean `cargo test`
-- **Plan B (Data + Features)**: Full data layer implemented
-  - Config: YAML + Pydantic validation
-  - Data schemas for 9 types (OHLCV, funding, OI, depth, trades, liquidations, cross-exchange, FX, records)
-  - Validation: monotonic timestamps, OHLC relationships, gap detection
-  - Import: CSV/Parquet ingestion with auto-validation
-  - Features: 7 indicators (SMA, EMA, RSI, Bollinger, VWAP, premium, funding_ma)
-  - Feature builder: multi-source join + indicator computation from YAML config
-- **Plan C (Strategy + Backtest + Report)**: Full strategy and orchestration layer
-  - Strategy protocol (vectorized compute → signals DataFrame)
-  - Momentum strategy (SMA crossover)
-  - Mean revert strategy (Bollinger band bounce with state tracking)
-  - Backtest orchestrator: config → strategy → Rust engine → save artifacts
-  - Report: JSON metrics + manifest for any run
-- **Plan D (Experiment + Optimize)**: Full experiment infrastructure
-  - Leaderboard: atomic JSON read/write
-  - Manifest: reproducibility metadata (data hash, git commit, versions)
-  - Grid search + random search optimizers
-  - goals.md template for Claude Code experiment loop
-- **CLI**: `bt data/features/backtest/report/optimize/strategies` all wired
-- **Tests**: 23 Rust + 21 Python = 44 total tests passing
-- **Configs**: default.yaml, momentum_v1.yaml, goals.md
+## Status — All Phases Complete
 
-### Not Yet Done
-- No real market data fetched (data sources need exchange-adapters integration)
-- `bt data fetch` not implemented (needs exchange-adapters as dependency)
-- No HTML report output (JSON only for now)
-- No Claude Code `/loop` experiment session run yet
-- Plans B/C/D not written as formal plan docs (executed directly from spec)
+| Phase | What | Tests |
+|-------|------|-------|
+| 1 MVP | Rust engine + vectorized strategies + CLI | 28 Rust + 21 Python |
+| 1.5 | Exchange integration (Upbit/Bithumb/Binance) | Verified live |
+| 2 | TimesFM forecast integration | 4 Python |
+| 3 | Optuna Bayesian optimizer | 6 Python |
+| 4 | PPO RL (Rust step API + Gymnasium env) | 5 Rust + 5 Python |
+| 5 | Scan replay backtester | Verified on 18,550 signals |
+| **Total** | | **28 Rust + 36 Python = 64 tests** |
+
+## Primary Workflow: Scan Replay
+
+The main use case is optimizing entry/exit rules for the Upbit trading bot:
+
+```bash
+# Fetch 1min OHLCV for all scanned coins
+# (already fetched 50 markets, data in data/raw/upbit/)
+
+# Run optimization
+bt replay --log ../upbit/data/trades.jsonl --ohlcv-dir data/raw
+```
+
+### Latest Optimization Results (18,550 signals, 50 markets)
+
+**Best entry filter:** `change_24h < 3% + rsi_15m > 60 + score > 35`
+**Best exit:** TP=2.0% SL=1.0% MaxHold=240min
+**Performance:** 60% WR, +0.75% avg PnL, Sharpe 0.51
+
+### Key Insight
+Bot's composite `score` alone has no alpha (r=+0.005). The edge is in signal combinations — specifically, entering **calm coins with building momentum** (low change_24h + high RSI), not coins already pumping.
+
+## Secondary Workflow: OHLCV Backtest
+
+Standard candle-based backtesting with Rust engine:
+
+```bash
+bt data fetch --pair BTC-USDT --source binance --type ohlcv --timeframe 1h --start 2024-06-01 --end 2025-01-01
+bt backtest --config configs/strategies/momentum_v1.yaml
+bt optimize --config configs/strategies/momentum_v1.yaml --space search_space.yaml --method bayesian --budget 30
+```
+
+## Project Structure
+
+```
+backtest/
+├── crates/bt-engine/src/     # Rust: engine, step API, PyO3 bindings
+├── src/bt/
+│   ├── replay/               # Scan replay backtester (PRIMARY)
+│   ├── data/sources/         # Upbit, Bithumb, Binance adapters
+│   ├── strategy/             # momentum, mean_revert, timesfm_signal, ppo
+│   ├── optimize/             # grid, random, bayesian (Optuna)
+│   ├── rl/                   # PPO Gymnasium env + training
+│   └── ...                   # config, cli, backtest, features, report, experiment
+├── data/raw/upbit/           # 1min OHLCV for 50+ KRW altcoins
+├── experiments/              # Replay results, goals.md, leaderboard
+└── docs/                     # Architecture, specs, plans
+```
 
 ## Resume Here
-1. **Get real data**: Integrate exchange-adapters, run `bt data fetch --pair BTC-USDT --source binance --type ohlcv --timeframe 1h`
-2. **Build features**: Create `configs/features.yaml`, run `bt features build --config configs/features.yaml`
-3. **Run first real backtest**: `bt backtest --config configs/strategies/momentum_v1.yaml`
-4. **Start experiment loop**: Use Claude Code `/loop` with `experiments/goals.md`
+
+1. **More data** — run bot longer, accumulate more trades.jsonl data, rerun `bt replay`
+2. **Apply rules to live bot** — encode optimal filters into bot config
+3. **Continuous optimization** — use Claude Code `/loop` with `bt replay` to auto-optimize as new data comes in
+4. **Bithumb expansion** — same replay approach for Bithumb scan data
 
 ## Decisions
-- **Hybrid Rust+Python**: Rust owns simulation loop (speed), Python owns CLI/data/ML (ecosystem). No Python in hot loop.
-- **Vectorized strategies**: Python precomputes signal columns, passes NumPy arrays to Rust once. No per-bar callbacks.
-- **NumPy not Arrow for MVP**: PyO3 + numpy crate. Arrow zero-copy deferred.
-- **Single instrument, long-only MVP**: No shorts, no multi-pair, no arb. Deferred to post-MVP.
-- **leaderboard.json not SQLite**: Single source of truth for experiments. SQLite deferred.
-- **`tick()` is shared state transition**: Both batch `run()` and future Phase 4 PPO `step()` call the same `tick()`.
-- **Config is single source of truth**: `bt backtest --config X.yaml`. No `--strategy` flag.
-- **PyO3 0.28 + Python feature gate**: Upgraded from plan's 0.23 for Python 3.14 compat; gated behind `python` cargo feature so `cargo test` works without linking libpython.
+- Hybrid Rust+Python: Rust simulation, Python orchestration
+- PyO3 0.28 for Python 3.14, `python` feature gate for clean cargo test
+- exchange-adapters as editable dep from sibling dir
+- Scan replay is primary workflow (microstructure alpha), OHLCV backtest is secondary
+- leaderboard.json for experiment tracking (not SQLite)
 
 ## Gotchas
-- `exchange-adapters` (sibling dir) is Python async with httpx+pydantic — use as editable install via uv
-- Drawdown must be checked AFTER mark-to-market (was a spec bug, now fixed)
-- Emergency halt liquidation uses Immediate fill even if config says NextBar (intentional)
-- Polars `pl.lit()` is an expression, not a Series — strategy examples must use `pl.Series()` for same-length columns
-- Signal strength >= threshold means long, < threshold means flat (not >)
-- `apply_fills` must clamp buy quantity if cash would go negative
-- Python 3.14 requires PyO3 >= 0.28 (0.23 max supported was 3.13)
-- `cargo test` requires the `python` feature to be OFF (default) — PyO3 cdylib can't link without Python runtime
-
-## Context
-- **Branch**: main (2 commits)
-- **Tests**: 23 Rust + 21 Python = 44 total, all passing
-- **Spec**: `docs/specs/2026-04-13-backtest-system-design.md`
-- **Plan A**: `docs/plans/2026-04-13-plan-a-rust-engine.md`
-- **Tech stack**: Rust (PyO3 0.28 + maturin), Python 3.14 (Polars, Typer, Pydantic, NumPy), uv
+- Upbit API: 200 bars per page, paginate backwards from `to` datetime
+- Upbit adapter needs PyJWT (`uv pip install PyJWT`)
+- Binance class name: `BinanceFuturesUssdtRestClient` (double 's' — typo in adapter)
+- `uv sync` can remove test deps — re-install with `uv pip install pytest`
+- maturin not in uv sync — install separately with `uv pip install maturin`

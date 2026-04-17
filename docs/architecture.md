@@ -2,31 +2,32 @@
 
 ## System Overview
 
+Two primary workflows: **Scan Replay** (microstructure signal optimization) and **OHLCV Backtest** (generic strategy backtesting).
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Claude Code /loop                        │
-│            reads goals.md, mutates YAML configs,            │
-│            runs bt CLI, parses JSON, updates leaderboard    │
+│  PRIMARY: Scan Replay (bt replay)                           │
+│  Bot scan logs → filter sweep → TP/SL grid → optimal rules │
 ├─────────────────────────────────────────────────────────────┤
+│  SECONDARY: OHLCV Backtest Pipeline                         │
 │                                                             │
 │  ┌──────────┐   ┌───────────┐   ┌──────────┐   ┌────────┐ │
 │  │ bt data  │──▶│bt features│──▶│bt backtest│──▶│bt report│ │
-│  │  fetch   │   │   build   │   │          │   │        │ │
-│  │  import  │   │           │   │          │   │        │ │
-│  │  validate│   │           │   │          │   │        │ │
+│  │  fetch   │   │   build   │   │  / train  │   │        │ │
 │  └────┬─────┘   └─────┬─────┘   └────┬─────┘   └────────┘ │
 │       │               │              │                      │
 │       ▼               ▼              ▼                      │
 │  data/raw/       data/features/  experiments/runs/          │
 │  *.parquet       *.parquet       {id}/metrics.json          │
-│                                  {id}/equity_curve.parquet  │
-│                                  {id}/manifest.json         │
 ├─────────────────────────────────────────────────────────────┤
 │                   Python Layer (src/bt/)                     │
 │                                                             │
 │  config.py ─────▶ Strategy ─────▶ Backtest Orchestrator     │
-│  (YAML+Pydantic)  (vectorized     (load data, run strategy, │
-│                    Polars)          call Rust, save results) │
+│  replay/           (vectorized     (load data, run strategy, │
+│  rl/               Polars)          call Rust, save results) │
+├─────────────────────────────────────────────────────────────┤
+│  Data Sources (exchange-adapters)                           │
+│  Upbit, Bithumb, Binance (async, editable dep)             │
 ├─────────────────────────────────────────────────────────────┤
 │                   Rust Engine (crates/bt-engine/)            │
 │                                                             │
@@ -297,16 +298,83 @@ All share `timestamp` (i64, Unix ms, UTC) as the join key. OHLCV is always the b
 | Experiments | leaderboard.json | Simple, atomic, single source of truth |
 | Build | uv + maturin | uv for Python deps, maturin for Rust → Python wheel |
 
+## Scan Replay Engine
+
+The primary alpha-finding tool. Replays bot scan events against 1min OHLCV data.
+
+```
+ trades.jsonl (bot scan log)
+      │
+      ├── 1,906 scans × 10 coins = 18,550 signal observations
+      │   Each has: score, change_24h, volume_ratio, bid_ratio,
+      │             rsi_15m, ema_cross, price, market
+      │
+      ▼
+ Replay Simulator (src/bt/replay/)
+      │
+      ├── For each observation passing entry filter:
+      │   1. Find 1min OHLCV bars after scan timestamp
+      │   2. Walk forward bar-by-bar
+      │   3. Check: did TP, SL, trailing stop, or stale timeout hit first?
+      │   4. Record outcome with full signal context
+      │
+      ▼
+ Filter Optimizer
+      │
+      ├── Phase 1: Test all 1/2/3-signal entry filter combos
+      │   (~2000 combinations, rank by avg PnL)
+      │
+      ├── Phase 2: Grid search TP/SL/trail/max_hold for best filter
+      │   (~360 exit configs)
+      │
+      └── Output: optimal entry rules + exit params + expected performance
+```
+
+## Exchange Data Sources
+
+```
+ src/bt/data/sources/
+      ├── binance.py    — Futures OHLCV (paginated), funding rates, OI, trades
+      ├── bithumb.py    — Spot OHLCV for KRW cross-exchange
+      └── upbit.py      — Spot OHLCV with backward pagination (1min/1h)
+
+ All use exchange-adapters (editable dep from sibling dir):
+   - Async HTTP via httpx
+   - Pydantic response models
+   - No API keys needed for public market data
+```
+
+## Reinforcement Learning (Phase 4)
+
+```
+ Rust StepEngine (crates/bt-engine/src/step.rs)
+      │
+      ├── step(strength, target_size) → (obs, reward, done)
+      │   Reuses tick() — same state transition as batch run()
+      │
+      ▼
+ Gymnasium BacktestEnv (src/bt/rl/env.py)
+      │
+      ├── Observation: [OHLCV, equity, cash, position, drawdown] (11 dims)
+      ├── Action: [strength, target_size] continuous [0,1]
+      ├── Reward: log return of equity
+      │
+      ▼
+ PPO Training (src/bt/rl/train.py)
+      │
+      └── stable-baselines3 MlpPolicy → saved model → PPOStrategy for bt backtest
+```
+
 ## Progressive ML Path
 
 | Phase | What | Status |
 |-------|------|--------|
 | **1 (MVP)** | Rust engine + vectorized strategies + grid search + CLI | **Done** |
-| 2 | TimesFM forecasts as feature columns | Not started |
-| 3 | Bayesian optimization (Optuna) | Not started |
-| 4 | PPO via Gymnasium env wrapping Rust step() API | Not started |
-
-Phase 4 reuses `tick()` via a `step(action) → (obs, reward, done)` API. The action→Signal translation is Phase 4 scope.
+| **1.5** | Exchange integration (Upbit/Bithumb/Binance) | **Done** |
+| **2** | TimesFM forecasts as feature columns | **Done** |
+| **3** | Bayesian optimization (Optuna TPE) | **Done** |
+| **4** | PPO (Gymnasium env + Rust step API) | **Done** |
+| **5** | Scan replay backtester (microstructure signals) | **Done** |
 
 ## Key Design Decisions
 

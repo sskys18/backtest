@@ -1,6 +1,10 @@
-# bt — Crypto Backtesting Framework
+# bt — Crypto Backtesting & Signal Optimization Framework
 
-Hybrid Rust+Python backtesting system. Rust owns the simulation loop (speed), Python owns CLI/data/ML (ecosystem).
+Hybrid Rust+Python system for backtesting crypto strategies and optimizing microstructure trading signals on Korean exchanges (Upbit, Bithumb).
+
+## Primary Goal
+
+Find alpha for early-stage KRW altcoins on Upbit/Bithumb. The edge is in microstructure signals (orderbook imbalance, whale activity, volume surges), not price-only indicators.
 
 ## Build & Test
 
@@ -10,6 +14,7 @@ cargo test -p bt-engine
 
 # Python setup + build extension
 uv venv && source .venv/bin/activate
+uv pip install maturin pytest optuna gymnasium stable-baselines3 PyJWT
 maturin develop
 
 # Python tests
@@ -18,39 +23,80 @@ uv run pytest tests/python/ -v
 # CLI
 uv run bt --help
 uv run bt strategies
-uv run bt backtest --config configs/strategies/momentum_v1.yaml
 ```
+
+## Two Backtesting Modes
+
+### 1. OHLCV Backtest (generic strategies on candle data)
+```bash
+bt data fetch --pair BTC-USDT --source binance --type ohlcv --timeframe 1h --start 2024-06-01 --end 2025-01-01
+bt backtest --config configs/strategies/momentum_v1.yaml
+```
+
+### 2. Scan Replay (microstructure signal optimization)
+```bash
+bt replay --log ../upbit/data/trades.jsonl --ohlcv-dir data/raw
+```
+Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit param combinations, finds optimal alpha. This is the primary workflow.
 
 ## Architecture
 
 ```
-Python CLI (typer)  →  Strategy (polars, vectorized)  →  Rust Engine (PyO3/NumPy)
-     ↓                        ↓                              ↓
-  config.py              signals DataFrame              bar loop + fills
-  backtest.py            strength + target_size         portfolio + risk
-  report/                                               equity curve + metrics
+┌─────────────────────────────────────────────┐
+│  Scan Replay Engine (bt replay)             │  ← primary workflow
+│  18k+ signal observations → filter sweep    │
+│  → TP/SL optimization → optimal rules       │
+├─────────────────────────────────────────────┤
+│  OHLCV Backtest Engine (bt backtest)        │  ← secondary workflow
+│  Python CLI → Strategy → Rust Engine        │
+├─────────────────────────────────────────────┤
+│  Data Sources                               │
+│  Upbit, Bithumb, Binance (exchange-adapters)│
+├─────────────────────────────────────────────┤
+│  Rust Core (crates/bt-engine/)              │
+│  tick(), run(), step() — PyO3/NumPy         │
+└─────────────────────────────────────────────┘
 ```
-
-- **No Python in the hot loop.** Strategies precompute signal arrays, Rust iterates bars.
-- **Config is single source of truth.** `bt backtest --config X.yaml` — everything lives in YAML.
-- **`tick()` is the shared state transition** — used by both batch `run()` and future PPO `step()`.
 
 ## Project Layout
 
-- `crates/bt-engine/src/` — Rust engine (types, broker, portfolio, risk, tick, engine, python bindings)
-- `src/bt/` — Python package (cli, config, data, features, strategy, backtest, report, experiment, optimize)
+- `crates/bt-engine/src/` — Rust engine (types, broker, portfolio, risk, tick, engine, step, python bindings)
+- `src/bt/replay/` — Scan replay backtester (loader, simulator, optimizer)
+- `src/bt/` — Python package (cli, config, data, features, strategy, backtest, report, experiment, optimize, rl)
+- `src/bt/data/sources/` — Exchange adapters (binance, bithumb, upbit)
+- `src/bt/rl/` — PPO reinforcement learning (env, train, policy_strategy)
 - `configs/` — YAML strategy configs
-- `tests/python/` — Python tests
-- `experiments/` — goals.md + leaderboard.json + run artifacts
+- `tests/python/` — Python tests (36 tests)
+- `experiments/` — goals.md + replay results + run artifacts
+- `data/raw/` — Parquet data store (gitignored)
 
 ## Key Conventions
 
 - Rust crate uses feature `python` for PyO3 bindings (off by default for `cargo test`)
-- PyO3 0.28 / numpy 0.28 required for Python 3.14
-- Polars for all DataFrames, NumPy only at the Rust boundary
-- Strategies must return `strength` (f64) and `target_size` (f64) columns, nulls filled with 0.0
-- Signal strength >= threshold → long, < threshold → flat
-- All data stored as Parquet, organized by type under `data/raw/`
+- PyO3 0.28 / numpy 0.28 for Python 3.14
+- exchange-adapters is an editable dependency from sibling dir
+- Polars for DataFrames, NumPy only at Rust boundary
+- Strategies return `strength` + `target_size` columns
+- All data stored as Parquet under `data/raw/{source}/{pair}/{type}/`
+
+## CLI Commands
+
+| Command | Purpose |
+|---------|---------|
+| `bt replay` | Scan replay optimization (primary) |
+| `bt backtest` | OHLCV backtest with strategy |
+| `bt data fetch` | Pull data from exchanges |
+| `bt data list` | List datasets |
+| `bt data validate` | Check data quality |
+| `bt features` | Build feature DataFrame |
+| `bt optimize` | Grid/random/bayesian param search |
+| `bt train` | PPO RL training |
+| `bt report` | Generate run report |
+| `bt strategies` | List registered strategies |
+
+## Strategies
+
+momentum, mean_revert, timesfm_signal, ppo
 
 ## Data Types
 
