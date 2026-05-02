@@ -18,8 +18,16 @@ app.add_typer(data_app, name="data")
 @data_app.command("fetch")
 def data_fetch(
     pair: str = typer.Option(..., help="Trading pair (e.g., BTC-USDT, BTC-KRW)"),
-    source: str = typer.Option(..., help="Data source (binance, bithumb, upbit)"),
-    data_type: str = typer.Option("ohlcv", "--type", help="Data type (ohlcv, funding, oi, trades)"),
+    source: str = typer.Option(
+        ...,
+        help="Source: binance, binance_spot, bithumb, upbit, fx, fng, onchain, binance_vision, coinalyze, coinglass",
+    ),
+    data_type: str = typer.Option(
+        "ohlcv", "--type",
+        help="Type: ohlcv, funding, oi, oi_hist, trades, lsr_top_pos, "
+             "lsr_top_acct, lsr_global, taker_ratio, depth_snap, liquidations, "
+             "metrics, book_depth_hist, fx, fng, onchain",
+    ),
     timeframe: str = typer.Option("1h", help="Bar timeframe (1m, 5m, 15m, 1h, 4h, 1d)"),
     start: str = typer.Option("2024-01-01", help="Start date (ISO format)"),
     end: str = typer.Option("2025-01-01", help="End date (ISO format)"),
@@ -86,6 +94,26 @@ def data_import(
 
     result = import_file(Path(path), data_type, Path(output) if output else None)
     typer.echo(json.dumps(result, indent=2))
+
+
+# ── bt collect-liq ────────────────────────────────────────────────────────────
+
+@app.command("collect-liq")
+def collect_liq(
+    flush: float = typer.Option(60.0, help="Flush interval in seconds"),
+) -> None:
+    """Stream Binance liquidations and append daily Parquet partitions.
+
+    Long-running daemon. Run under a process supervisor. Live-only because
+    Binance removed historical liquidations REST in 2021.
+    """
+    import asyncio
+
+    from bt.config import find_project_root
+    from bt.data.collect_liq import collect
+
+    typer.echo("Starting liquidation collector. Ctrl-C to stop.")
+    asyncio.run(collect(find_project_root(), flush_interval=flush))
 
 
 # ── bt features build ─────────────────────────────────────────────────────────
@@ -167,6 +195,31 @@ def train(
     from bt.rl.train import train_ppo
     result = train_ppo(data_path, output, timesteps, seed=seed)
     typer.echo(json.dumps(result, indent=2, default=str))
+
+
+# ── bt scan-backtest ─────────────────────────────────────────────────────────
+
+@app.command("scan-backtest")
+def scan_backtest(
+    name: str = typer.Option("all", help="Scanner name or 'all'"),
+    feature_path: str = typer.Option(..., "--features", help="Path to feature parquet"),
+    output: str = typer.Option("experiments/scanners", help="Output directory"),
+    params: str = typer.Option("{}", help="JSON params dict, keyed by scanner name"),
+) -> None:
+    """Run scanner backtest(s) against feature parquet."""
+    from dataclasses import asdict
+
+    from bt.scanners.registry import get_scanner
+    from bt.scanners.run import params_for, run_all, run_scanner
+
+    params_dict = json.loads(params)
+    if name == "all":
+        results = run_all(feature_path, params_dict, output)
+    else:
+        spec = get_scanner(name)
+        results = [run_scanner(name, feature_path, params_for(params_dict, spec.name), output)]
+
+    typer.echo(json.dumps([asdict(result) for result in results], indent=2, default=str))
 
 
 # ── bt replay ───────────────────────────────────────────────────────────

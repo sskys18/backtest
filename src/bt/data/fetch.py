@@ -13,12 +13,24 @@ from bt.data.store import normalize_and_save
 from bt.data.validate import validate_dataframe
 
 
+TIMEFRAMED_TYPES = frozenset({
+    "ohlcv", "trades", "oi_hist",
+    "lsr_top_pos", "lsr_top_acct", "lsr_global", "taker_ratio",
+    "metrics", "book_depth_hist",
+})
+
 # Source registry — lazy imports to avoid requiring all exchange deps
 SOURCE_REGISTRY: dict[str, str] = {
     "binance": "bt.data.sources.binance:BinanceSource",
     "binance_spot": "bt.data.sources.binance:BinanceSpotSource",
     "bithumb": "bt.data.sources.bithumb:BithumbSource",
     "upbit": "bt.data.sources.upbit:UpbitSource",
+    "fx": "bt.data.sources.fx:FxSource",
+    "fng": "bt.data.sources.fng:FngSource",
+    "onchain": "bt.data.sources.onchain:OnchainSource",
+    "binance_vision": "bt.data.sources.binance_vision:BinanceVisionSource",
+    "coinalyze": "bt.data.sources.coinalyze:CoinalyzeSource",
+    "coinglass": "bt.data.sources.coinglass:CoinglassSource",
 }
 
 
@@ -85,12 +97,12 @@ def fetch_data(
         out_path = Path(output)
     else:
         root = find_project_root()
-        # data/raw/{source}/{pair}/{type}/{timeframe}/
         pair_dir = pair.replace("/", "-")
-        if data_type == "ohlcv":
-            out_path = root / "data" / "raw" / source / pair_dir / data_type / timeframe / "data.parquet"
+        base = root / "data" / "raw" / source / pair_dir / data_type
+        if data_type in TIMEFRAMED_TYPES:
+            out_path = base / timeframe / "data.parquet"
         else:
-            out_path = root / "data" / "raw" / source / pair_dir / data_type / "data.parquet"
+            out_path = base / "data.parquet"
 
     saved = normalize_and_save(df, data_type, out_path)
 
