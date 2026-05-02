@@ -1,0 +1,14 @@
+best_params:
+  score_threshold: 55
+  w_fund: 5
+  w_liq: 15
+  w_oi: 20
+  w_rs: 15
+  w_vwap: 35
+best_score: 0.14361250490275432
+fwd_horizon_bars: 12
+n_signals: 269
+n_trials: 200
+scanner: alpha_terminal
+sl_pct: 0.01
+tp_pct: 0.02
