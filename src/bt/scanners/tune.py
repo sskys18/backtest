@@ -34,6 +34,12 @@ SEARCH_SPACES: dict[str, dict] = {
     "nahonja": {
         "score_threshold": {"min": 30, "max": 80, "step": 4},
     },
+    "squeeze_hunter": {
+        "oi_velocity_min": {"min": -50.0, "max": 50.0, "step": 5.0},
+        "cvd_min": {"min": -100.0, "max": 100.0, "step": 10.0},
+        "liq_z_min": {"min": 0.5, "max": 3.5, "step": 0.5},
+        "lsr_threshold": {"min": 0.8, "max": 2.0, "step": 0.1},
+    },
 }
 
 
