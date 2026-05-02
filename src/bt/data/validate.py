@@ -114,7 +114,12 @@ def validate_path(path: Path) -> dict:
 def _infer_data_type(df: pl.DataFrame) -> str:
     """Infer data type from DataFrame columns."""
     cols = set(df.columns)
-    for dtype, schema in SCHEMAS.items():
+    schemas_by_specificity = sorted(
+        SCHEMAS.items(),
+        key=lambda item: len(item[1]),
+        reverse=True,
+    )
+    for dtype, schema in schemas_by_specificity:
         required = set(schema.keys())
         if required.issubset(cols):
             return dtype

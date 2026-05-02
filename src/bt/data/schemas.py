@@ -23,6 +23,29 @@ SCHEMAS: dict[str, dict[str, pl.DataType]] = {
         "timestamp": pl.Int64,
         "open_interest": pl.Float64,
     },
+    "oi_hist": {
+        "timestamp": pl.Int64,
+        "open_interest": pl.Float64,
+        "open_interest_value": pl.Float64,
+    },
+    "lsr_top_pos": {
+        "timestamp": pl.Int64,
+        "long_short_ratio": pl.Float64,
+        "long_account": pl.Float64,
+        "short_account": pl.Float64,
+    },
+    "lsr_top_acct": {
+        "timestamp": pl.Int64,
+        "long_short_ratio": pl.Float64,
+        "long_account": pl.Float64,
+        "short_account": pl.Float64,
+    },
+    "lsr_global": {
+        "timestamp": pl.Int64,
+        "long_short_ratio": pl.Float64,
+        "long_account": pl.Float64,
+        "short_account": pl.Float64,
+    },
     "depth": {
         "timestamp": pl.Int64,
         "bid_price_1": pl.Float64,
@@ -39,10 +62,39 @@ SCHEMAS: dict[str, dict[str, pl.DataType]] = {
         "sell_volume": pl.Float64,
         "vwap": pl.Float64,
     },
+    "taker_ratio": {
+        "timestamp": pl.Int64,
+        "buy_sell_ratio": pl.Float64,
+        "buy_vol": pl.Float64,
+        "sell_vol": pl.Float64,
+    },
+    "depth_snap": {
+        "timestamp": pl.Int64,
+        "bid_total_qty": pl.Float64,
+        "ask_total_qty": pl.Float64,
+        "bid_top10_qty": pl.Float64,
+        "ask_top10_qty": pl.Float64,
+        "imbalance": pl.Float64,
+        "spread_bps": pl.Float64,
+    },
     "liquidations": {
         "timestamp": pl.Int64,
         "long_liq_usd": pl.Float64,
         "short_liq_usd": pl.Float64,
+    },
+    "metrics": {
+        "timestamp": pl.Int64,
+        "open_interest": pl.Float64,
+        "open_interest_value": pl.Float64,
+        "toptrader_lsr": pl.Float64,
+        "global_lsr": pl.Float64,
+        "taker_ratio": pl.Float64,
+    },
+    "book_depth_hist": {
+        "timestamp": pl.Int64,
+        "percentage": pl.Float64,
+        "depth": pl.Float64,
+        "notional": pl.Float64,
     },
     "cross_exchange": {
         "timestamp": pl.Int64,
@@ -54,6 +106,17 @@ SCHEMAS: dict[str, dict[str, pl.DataType]] = {
         "timestamp": pl.Int64,
         "pair": pl.Utf8,
         "rate": pl.Float64,
+    },
+    "fng": {
+        "timestamp": pl.Int64,
+        "value": pl.Int64,
+        "classification": pl.Utf8,
+    },
+    "onchain": {
+        "timestamp": pl.Int64,
+        "tx_count": pl.Int64,
+        "hashrate": pl.Float64,
+        "fees_usd": pl.Float64,
     },
     "records": {
         "timestamp": pl.Int64,

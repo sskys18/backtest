@@ -69,3 +69,86 @@ class TestOHLCVValidation:
         })
         report = validate_dataframe(df, "ohlcv")
         assert not report["valid"]
+
+
+class TestExtendedSchemas:
+    def test_oi_hist_schema(self):
+        from bt.data.schemas import SCHEMAS, get_required_columns
+        assert "oi_hist" in SCHEMAS
+        assert get_required_columns("oi_hist") == [
+            "timestamp", "open_interest", "open_interest_value",
+        ]
+
+    def test_lsr_schema(self):
+        from bt.data.schemas import SCHEMAS, get_required_columns
+        for t in ("lsr_top_pos", "lsr_top_acct", "lsr_global"):
+            assert t in SCHEMAS
+            cols = get_required_columns(t)
+            assert cols == ["timestamp", "long_short_ratio", "long_account", "short_account"]
+
+    def test_taker_ratio_schema(self):
+        from bt.data.schemas import SCHEMAS, get_required_columns
+        assert "taker_ratio" in SCHEMAS
+        assert get_required_columns("taker_ratio") == [
+            "timestamp", "buy_sell_ratio", "buy_vol", "sell_vol",
+        ]
+
+    def test_depth_snap_schema(self):
+        from bt.data.schemas import SCHEMAS, get_required_columns
+        assert "depth_snap" in SCHEMAS
+        cols = get_required_columns("depth_snap")
+        assert cols[0] == "timestamp"
+        assert "bid_total_qty" in cols
+        assert "ask_total_qty" in cols
+        assert "imbalance" in cols
+
+    def test_fng_schema(self):
+        from bt.data.schemas import SCHEMAS, get_required_columns
+        assert "fng" in SCHEMAS
+        assert get_required_columns("fng") == [
+            "timestamp", "value", "classification",
+        ]
+
+    def test_onchain_schema(self):
+        from bt.data.schemas import SCHEMAS, get_required_columns
+        assert "onchain" in SCHEMAS
+        cols = get_required_columns("onchain")
+        assert "timestamp" in cols
+        assert "tx_count" in cols
+        assert "hashrate" in cols
+        assert "fees_usd" in cols
+
+    def test_binance_vision_schemas(self):
+        from bt.data.schemas import SCHEMAS, get_required_columns
+
+        assert "metrics" in SCHEMAS
+        assert get_required_columns("metrics") == [
+            "timestamp",
+            "open_interest",
+            "open_interest_value",
+            "toptrader_lsr",
+            "global_lsr",
+            "taker_ratio",
+        ]
+        assert "book_depth_hist" in SCHEMAS
+        assert get_required_columns("book_depth_hist") == [
+            "timestamp",
+            "percentage",
+            "depth",
+            "notional",
+        ]
+
+    def test_validate_path_infers_oi_hist_schema(self, tmp_path):
+        from bt.data.validate import validate_path
+
+        path = tmp_path / "oi_hist.parquet"
+        pl.DataFrame({
+            "timestamp": [1700000000000],
+            "open_interest": [10000.5],
+            "open_interest_value": [500000000.0],
+        }).write_parquet(path)
+
+        report = validate_path(path)
+
+        assert report["valid"]
+        assert report["data_type"] == "oi_hist"
