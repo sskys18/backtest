@@ -54,14 +54,40 @@ bt scan-backtest --name alpha_terminal --features features.parquet \
 
 ## Tuning workflow
 
-For the four APPROXIMATION scanners (`alpha_hunter`, `alpha_terminal`, `nahonja`, `squeeze_hunter`), tune with:
+For the four APPROXIMATION scanners (`alpha_hunter`, `alpha_terminal`, `nahonja`, `squeeze_hunter`):
+
+### 1. Build the feature parquet
 
 ```bash
-bt scanner-tune --name all --features path/to/features.parquet --trials 200 --horizon 12 --tp 0.02 --sl 0.01
+# Degraded (liq stub = 0; squeeze_hunter cannot signal):
+python scripts/build_btc_scanner_features.py
+
+# Full (real CoinAnk liquidations forward-filled to 5m bars):
+python scripts/build_btc_scanner_features.py --with-liq
 ```
 
-Best params per scanner save under `experiments/scanner_tuning/<name>_best.yaml`. Apply by passing `--params` to `bt scan-backtest`.
+The `--with-liq` mode requires CoinAnk to be reachable (no 403 cooldown). The script auto-falls-back to zero-stub if CoinAnk returns empty.
 
-Objective is forward-return Sharpe with TP/SL clamp; signal rate above 15% is penalized to avoid degenerate "always signal" solutions. With historical liquidation data via `coinank`, all four scanners (including `squeeze_hunter`) can be tuned end-to-end.
+### 2. Tune
 
-See `docs/investigations/2026-05-02-historical-liquidations.md` for the full data-source exploration that led to the CoinAnk choice.
+```bash
+bt scanner-tune --name all --features data/features/btc_usdt_scanner_tuning.parquet \
+  --trials 200 --horizon 12 --tp 0.02 --sl 0.01
+```
+
+Best params per scanner save under `experiments/scanner_tuning/<name>_best.yaml`. Apply via `--params` to `bt scan-backtest`.
+
+### Objective
+
+Forward-return Sharpe over `--horizon` bars with TP/SL clamp. Signal rate above 15% is penalized so degenerate "always signal" solutions cannot win.
+
+### Latest results (BTC-USDT 30d 5m, degraded liq stub)
+
+| Scanner | Sharpe | n_signals | rate | Notes |
+|---------|--------|-----------|------|-------|
+| `alpha_hunter` | 0.127 | 421 | 4.9% | `entry_stage=2` confirmed default |
+| `alpha_terminal` | 0.144 | 269 | 3.1% | `threshold=55` confirmed default; weights tuned |
+| `nahonja` | 0.151 | 421 | 4.9% | `threshold=38` (default 50 too strict) |
+| `squeeze_hunter` | 0.000 | 0 | 0.0% | DEGRADED: liq stub. AND-gate can't signal. Re-tune when CoinAnk recovers. |
+
+See `docs/investigations/2026-05-02-historical-liquidations.md` for the data-source exploration.
