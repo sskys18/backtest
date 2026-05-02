@@ -25,8 +25,18 @@ def _symbol(pair: str) -> str:
 class BinanceSource:
     """Binance data source supporting OHLCV, funding, OI, trades."""
 
+    _LSR_ENDPOINTS = {
+        "lsr_top_pos": "/futures/data/topLongShortPositionRatio",
+        "lsr_top_acct": "/futures/data/topLongShortAccountRatio",
+        "lsr_global": "/futures/data/globalLongShortAccountRatio",
+    }
+
     def supported_types(self) -> list[str]:
-        return ["ohlcv", "funding", "oi", "trades"]
+        return [
+            "ohlcv", "funding", "oi", "oi_hist", "trades",
+            "lsr_top_pos", "lsr_top_acct", "lsr_global",
+            "taker_ratio", "depth_snap",
+        ]
 
     async def fetch(
         self,
@@ -42,8 +52,16 @@ class BinanceSource:
             return await self._fetch_funding(pair, start, end)
         elif data_type == "oi":
             return await self._fetch_oi(pair)
+        elif data_type == "oi_hist":
+            return await self._fetch_oi_hist(pair, timeframe, start, end)
         elif data_type == "trades":
             return await self._fetch_trades(pair, timeframe, start, end)
+        elif data_type in self._LSR_ENDPOINTS:
+            return await self._fetch_lsr(pair, data_type, timeframe, start, end)
+        elif data_type == "taker_ratio":
+            return await self._fetch_taker_ratio(pair, timeframe, start, end)
+        elif data_type == "depth_snap":
+            return await self._fetch_depth_snap(pair)
         else:
             raise ValueError(f"Unsupported data type for Binance: {data_type}")
 
@@ -160,6 +178,175 @@ class BinanceSource:
             }])
         finally:
             await http.close()
+
+    async def _fetch_oi_hist(
+        self, pair: str, timeframe: str, start: datetime, end: datetime,
+    ) -> pl.DataFrame:
+        """Fetch open interest history from Binance futures (max 30d, 500 rows/call)."""
+        symbol = _symbol(pair)
+        period = _timeframe_to_oi_period(timeframe)
+        start_ms = _to_ms(start)
+        end_ms = _to_ms(end)
+
+        http = HttpClient(FUTURES_BASE_URL)
+        all_rows = []
+        current_start = start_ms
+
+        try:
+            while current_start < end_ms:
+                params = {
+                    "symbol": symbol, "period": period,
+                    "startTime": current_start, "endTime": end_ms, "limit": 500,
+                }
+                resp = await http.get("/futures/data/openInterestHist", params=params)
+                if not resp:
+                    break
+                for r in resp:
+                    all_rows.append({
+                        "timestamp": int(r["timestamp"]),
+                        "open_interest": float(r["sumOpenInterest"]),
+                        "open_interest_value": float(r["sumOpenInterestValue"]),
+                    })
+                last_ts = int(resp[-1]["timestamp"])
+                if last_ts <= current_start:
+                    break
+                current_start = last_ts + 1
+        finally:
+            await http.close()
+
+        if not all_rows:
+            return pl.DataFrame(schema={
+                "timestamp": pl.Int64, "open_interest": pl.Float64,
+                "open_interest_value": pl.Float64,
+            })
+        return pl.DataFrame(all_rows).unique(subset=["timestamp"]).sort("timestamp")
+
+    async def _fetch_lsr(
+        self, pair: str, data_type: str, timeframe: str,
+        start: datetime, end: datetime,
+    ) -> pl.DataFrame:
+        """Fetch long/short ratio (max 30d, 500 rows/call)."""
+        endpoint = self._LSR_ENDPOINTS[data_type]
+        symbol = _symbol(pair)
+        period = _timeframe_to_oi_period(timeframe)
+        start_ms = _to_ms(start)
+        end_ms = _to_ms(end)
+
+        http = HttpClient(FUTURES_BASE_URL)
+        all_rows = []
+        current_start = start_ms
+
+        try:
+            while current_start < end_ms:
+                params = {
+                    "symbol": symbol, "period": period,
+                    "startTime": current_start, "endTime": end_ms, "limit": 500,
+                }
+                resp = await http.get(endpoint, params=params)
+                if not resp:
+                    break
+                for r in resp:
+                    all_rows.append({
+                        "timestamp": int(r["timestamp"]),
+                        "long_short_ratio": float(r["longShortRatio"]),
+                        "long_account": float(r["longAccount"]),
+                        "short_account": float(r["shortAccount"]),
+                    })
+                last_ts = int(resp[-1]["timestamp"])
+                if last_ts <= current_start:
+                    break
+                current_start = last_ts + 1
+        finally:
+            await http.close()
+
+        if not all_rows:
+            return pl.DataFrame(schema={
+                "timestamp": pl.Int64, "long_short_ratio": pl.Float64,
+                "long_account": pl.Float64, "short_account": pl.Float64,
+            })
+        return pl.DataFrame(all_rows).unique(subset=["timestamp"]).sort("timestamp")
+
+    async def _fetch_taker_ratio(
+        self, pair: str, timeframe: str, start: datetime, end: datetime,
+    ) -> pl.DataFrame:
+        """Fetch taker buy/sell ratio (max 30d, 500 rows/call)."""
+        symbol = _symbol(pair)
+        period = _timeframe_to_oi_period(timeframe)
+        start_ms = _to_ms(start)
+        end_ms = _to_ms(end)
+
+        http = HttpClient(FUTURES_BASE_URL)
+        all_rows = []
+        current_start = start_ms
+
+        try:
+            while current_start < end_ms:
+                params = {
+                    "symbol": symbol, "period": period,
+                    "startTime": current_start, "endTime": end_ms, "limit": 500,
+                }
+                resp = await http.get("/futures/data/takerlongshortRatio", params=params)
+                if not resp:
+                    break
+                for r in resp:
+                    all_rows.append({
+                        "timestamp": int(r["timestamp"]),
+                        "buy_sell_ratio": float(r["buySellRatio"]),
+                        "buy_vol": float(r["buyVol"]),
+                        "sell_vol": float(r["sellVol"]),
+                    })
+                last_ts = int(resp[-1]["timestamp"])
+                if last_ts <= current_start:
+                    break
+                current_start = last_ts + 1
+        finally:
+            await http.close()
+
+        if not all_rows:
+            return pl.DataFrame(schema={
+                "timestamp": pl.Int64, "buy_sell_ratio": pl.Float64,
+                "buy_vol": pl.Float64, "sell_vol": pl.Float64,
+            })
+        return pl.DataFrame(all_rows).unique(subset=["timestamp"]).sort("timestamp")
+
+    async def _fetch_depth_snap(self, pair: str) -> pl.DataFrame:
+        """Snapshot of current orderbook (top 1000 levels)."""
+        symbol = _symbol(pair)
+        http = HttpClient(FUTURES_BASE_URL)
+        client = BinanceFuturesUssdtRestClient(http)
+        try:
+            book = await client.get_order_book(symbol=symbol, limit=1000)
+        finally:
+            await http.close()
+
+        bids = book.get("bids", [])
+        asks = book.get("asks", [])
+        if not bids or not asks:
+            return pl.DataFrame(schema={
+                "timestamp": pl.Int64, "bid_total_qty": pl.Float64,
+                "ask_total_qty": pl.Float64, "bid_top10_qty": pl.Float64,
+                "ask_top10_qty": pl.Float64, "imbalance": pl.Float64,
+                "spread_bps": pl.Float64,
+            })
+
+        bid_qty = [float(b[1]) for b in bids]
+        ask_qty = [float(a[1]) for a in asks]
+        best_bid = float(bids[0][0])
+        best_ask = float(asks[0][0])
+        bid_total = sum(bid_qty)
+        ask_total = sum(ask_qty)
+        bid_top10 = sum(bid_qty[:10])
+        ask_top10 = sum(ask_qty[:10])
+        mid = (best_bid + best_ask) / 2
+        imbalance = (bid_total - ask_total) / (bid_total + ask_total) if (bid_total + ask_total) > 0 else 0.0
+        spread_bps = ((best_ask - best_bid) / mid) * 10_000 if mid > 0 else 0.0
+        ts = int(book.get("E") or book.get("T") or int(datetime.now().timestamp() * 1000))
+
+        return pl.DataFrame([{
+            "timestamp": ts, "bid_total_qty": bid_total, "ask_total_qty": ask_total,
+            "bid_top10_qty": bid_top10, "ask_top10_qty": ask_top10,
+            "imbalance": imbalance, "spread_bps": spread_bps,
+        }])
 
     async def _fetch_trades(
         self, pair: str, timeframe: str, start: datetime, end: datetime,
@@ -286,3 +473,9 @@ def _timeframe_to_ms(tf: str) -> int:
         "1d": 86_400_000,
     }
     return mapping.get(tf, 3_600_000)
+
+
+def _timeframe_to_oi_period(tf: str) -> str:
+    """Binance OI hist allowed periods: 5m,15m,30m,1h,2h,4h,6h,12h,1d."""
+    allowed = {"5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"}
+    return tf if tf in allowed else "5m"
