@@ -5,14 +5,14 @@ data types it requires.
 
 ## Per-scanner requirements
 
-| Scanner | Required types | Status after this plan |
-|---------|----------------|------------------------|
-| alpha-hunter | OI hist, funding, trades (CVD), depth_snap (MI proxy) | covered |
-| alpha-terminal | OHLCV, OI hist, funding, trades, liquidations (live), F&G | covered; liquidations are live-only |
-| kimp-wave | OHLCV (Upbit, Bithumb, Binance), FX | covered |
-| liqpressuremap | liquidations (live), OI hist, lsr_top_pos | covered; liquidations are live-only |
-| nahonja-scanner | OHLCV, funding, OI hist, taker_ratio, liquidations (live) | covered; liquidations are live-only |
-| squeeze-hunter | OI hist, trades (CVD), liquidations (live), lsr_top_pos | covered; liquidations are live-only |
+| Scanner | Required types | Status |
+|---------|----------------|--------|
+| alpha-hunter | OI hist, funding, trades (CVD), depth_snap | ✅ Fully covered |
+| alpha-terminal | OHLCV, OI hist, funding, trades, liquidations, F&G | ✅ Liq via CoinAnk (historical) or live daemon |
+| kimp-wave | OHLCV (Upbit/Bithumb/Binance), FX | ✅ Fully covered |
+| liqpressuremap | liquidations, OI hist, lsr_top_pos | ✅ Liq via CoinAnk (historical) or live daemon |
+| nahonja-scanner | OHLCV, funding, OI hist, taker_ratio, liquidations | ✅ Liq via CoinAnk (historical) or live daemon |
+| squeeze-hunter | OI hist, trades (CVD), liquidations, lsr_top_pos | ✅ Liq via CoinAnk (historical) or live daemon |
 | kimchi-audit-picks | OHLCV (Upbit/Bithumb), aggregated coin metadata | OHLCV covered; metadata is manual import |
 
 ## Per-type CLI examples
@@ -38,7 +38,13 @@ bt data fetch --pair USD-KRW --source fx --type fx --start 2026-04-01 --end 2026
 bt data fetch --pair BTC --source fng --type fng --start 2024-01-01 --end 2026-04-30
 bt data fetch --pair BTC --source onchain --type onchain --start 2024-01-01 --end 2026-04-30
 
-# Liquidations live daemon
+# Liquidations historical (no signup, free)
+bt data fetch --pair BTC-USDT --source coinank --type liquidations --timeframe 4h --start 2026-04-02 --end 2026-05-02   # 30 days at 4h
+bt data fetch --pair BTC-USDT --source coinank --type liquidations --timeframe 12h --start 2026-02-01 --end 2026-05-02  # 90 days at 12h
+bt data fetch --pair BTC-USDT --source coinank --type liquidations --timeframe 1d --start 2025-11-01 --end 2026-05-02   # 180 days at 1d
+COINANK_EXCHANGE=Binance bt data fetch --pair BTC-USDT --source coinank --type liquidations --timeframe 4h --start 2026-04-02 --end 2026-05-02
+
+# Liquidations live daemon (real-time, infinite forward)
 bt collect-liq --flush 60
 ```
 
@@ -46,9 +52,14 @@ bt collect-liq --flush 60
 
 - Binance OI hist, LSR, and taker_ratio: Binance exposes a 30-day rolling
   window. For longer local history, run incremental fetches and append.
-- Liquidations: Binance removed historical liquidations REST in 2021. Use
-  `bt collect-liq` for live capture. Historical data requires an external
-  paid feed and is intentionally out of scope.
+- Liquidations: Binance removed historical liquidations REST in 2021.
+  Three free options now available:
+    - `coinank` source: historical aggregated long/short turnover per
+      exchange. Up to 180 days at 1d granularity, 30 days at 4h, 7.5 days
+      at 1h. No signup required.
+    - `bt collect-liq` daemon: live per-event Binance WS capture, infinite
+      forward.
+    - `coinalyze`/`coinglass` adapters: historical with free-tier API key.
 - Depth: `depth_snap` is a current snapshot only. It does not reconstruct a
   historical order book.
 - FX: ExchangeRate-API provides current-day rates. Historical USD/KRW uses
@@ -56,14 +67,17 @@ bt collect-liq --flush 60
 
 ## Liquidations source matrix
 
-| Source | Coverage | Cost |
-|--------|----------|------|
-| Binance REST `/forceOrders` | Removed 2021 | Free |
-| Binance Vision `liquidationSnapshot/` | Empty | Free |
-| Binance WS `!forceOrder@arr` | Live forward only | Free; needs `bt collect-liq` daemon |
-| Coinalyze | Historical | Free tier with `COINALYZE_API_KEY` env |
-| Coinglass v3 | Historical | Free tier with `COINGLASS_API_KEY` env |
-| CryptoQuant / Kaiko | Historical | Paid; out of scope |
+| Source | Coverage | Auth | Cost |
+|--------|----------|------|------|
+| **CoinAnk** (`coinank`) | **180d daily / 90d 12h / 30d 4h aggregated, all major exchanges** | Embedded browser key | **Free, no signup** |
+| Binance WS (`bt collect-liq`) | Live forward only, per-event | None | Free |
+| Coinalyze (`coinalyze`) | Historical | `COINALYZE_API_KEY` env | Free tier with signup |
+| Coinglass v3 (`coinglass`) | Historical | `COINGLASS_API_KEY` env | Free tier with signup |
+| Binance REST `/forceOrders` | — | — | Removed 2021 |
+| Binance Vision `liquidationSnapshot/` | — | — | Empty (confirmed 2026-05-02) |
+| Coinglass internal `capi.coinglass.com` | Historical | Browser key | AES-encrypted; not usable from curl |
+| CryptoQuant / Kaiko | Historical | Paid | Out of scope |
+| OKX `/public/liquidation-orders` | Last 24-48h, per-event | Public | User-excluded from this project |
 
 ## Bonus historical sources
 

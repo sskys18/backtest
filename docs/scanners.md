@@ -39,7 +39,7 @@ bt scan-backtest --name alpha_terminal --features features.parquet \
 | `oi_z`, `oi_velocity` | Binance `oi_hist` or Binance Vision `metrics` |
 | `cvd` | Binance `trades` |
 | `funding_rate` | Binance `funding` |
-| `liq_intensity`, `liq_z`, `liq_imbalance` | `bt collect-liq` live capture, or Coinalyze/Coinglass with API key |
+| `liq_intensity`, `liq_z`, `liq_imbalance` | `coinank` source (free, historical), `bt collect-liq` live capture, or Coinalyze/Coinglass with API key |
 | `taker_ratio` | Binance `taker_ratio` or Binance Vision `metrics` |
 | `toptrader_lsr` | Binance `lsr_top_pos` or Binance Vision `metrics` |
 | `rs_btc` | `bt.features.rs` with aligned BTC close in the feature parquet |
@@ -47,6 +47,21 @@ bt scan-backtest --name alpha_terminal --features features.parquet \
 
 ## Known gaps
 
-- Binance free historical liquidation data is not available. Binance WebSocket liquidation capture is live-forward only.
+- Binance does not publish historical liquidations on REST or Vision dump. `bt collect-liq` captures live forward via WebSocket; `coinank` source provides aggregated historical (180d at 1d, 30d at 4h, 7.5d at 1h).
+- CoinAnk uses a browser-embedded API key. If 403 ("system error") returns, wait for the rate limit (typically minutes) or refresh the key from `coinank.com` network tab into env `COINANK_APIKEY`.
 - Coinalyze and Coinglass historical liquidation adapters require user-owned API keys.
 - `kimchi_audit` is a universe-selection scanner over pair metadata, not a bar-timing scanner.
+
+## Tuning workflow
+
+For the four APPROXIMATION scanners (`alpha_hunter`, `alpha_terminal`, `nahonja`, `squeeze_hunter`), tune with:
+
+```bash
+bt scanner-tune --name all --features path/to/features.parquet --trials 200 --horizon 12 --tp 0.02 --sl 0.01
+```
+
+Best params per scanner save under `experiments/scanner_tuning/<name>_best.yaml`. Apply by passing `--params` to `bt scan-backtest`.
+
+Objective is forward-return Sharpe with TP/SL clamp; signal rate above 15% is penalized to avoid degenerate "always signal" solutions. With historical liquidation data via `coinank`, all four scanners (including `squeeze_hunter`) can be tuned end-to-end.
+
+See `docs/investigations/2026-05-02-historical-liquidations.md` for the full data-source exploration that led to the CoinAnk choice.
