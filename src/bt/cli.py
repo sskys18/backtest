@@ -197,6 +197,30 @@ def train(
     typer.echo(json.dumps(result, indent=2, default=str))
 
 
+# ── bt scanner-tune ──────────────────────────────────────────────────────────
+
+@app.command("scanner-tune")
+def scanner_tune(
+    name: str = typer.Option("all", help="Scanner name or 'all' (alpha_hunter|alpha_terminal|nahonja)"),
+    feature_path: str = typer.Option(..., "--features", help="Path to feature parquet"),
+    output: str = typer.Option("experiments/scanner_tuning", help="Output directory"),
+    trials: int = typer.Option(200, help="Optuna TPE trials per scanner"),
+    horizon: int = typer.Option(12, help="Forward-return horizon in bars"),
+    tp: float = typer.Option(0.02, help="TP cap as fraction"),
+    sl: float = typer.Option(0.01, help="SL cap as fraction"),
+) -> None:
+    """Tune APPROXIMATION scanners' params via Optuna TPE on forward-return Sharpe."""
+    from dataclasses import asdict
+
+    from bt.scanners.tune import tune_all, tune_scanner
+
+    if name == "all":
+        results = tune_all(feature_path, output, trials, horizon, tp, sl)
+    else:
+        results = [tune_scanner(name, feature_path, trials, horizon, tp, sl)]
+    typer.echo(json.dumps([asdict(r) for r in results], indent=2, default=str))
+
+
 # ── bt scan-backtest ─────────────────────────────────────────────────────────
 
 @app.command("scan-backtest")
