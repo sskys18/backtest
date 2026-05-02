@@ -1,0 +1,20 @@
+# DEGRADED: liq_z stub = 0 in feature parquet (CoinAnk rate-limited at tune time).
+# Squeeze hunter requires AND of 4 layers including liq_z >= threshold.
+# With liq_z = 0, layer always fails -> 0 signals regardless of other params.
+# Re-run with real CoinAnk liq data once rate limit clears:
+#   bt data fetch --pair BTC-USDT --source coinank --type liquidations --timeframe 4h \
+#     --start 2026-04-02 --end 2026-05-02
+# Then rebuild features parquet substituting real liq columns and re-tune.
+status: DEGRADED_LIQ_STUB
+scanner: squeeze_hunter
+best_params:
+  cvd_min: 90.0
+  liq_z_min: 3.0
+  lsr_threshold: 1.5
+  oi_velocity_min: -15.0
+best_score: 0.0
+n_signals: 0
+n_trials: 200
+fwd_horizon_bars: 12
+sl_pct: 0.01
+tp_pct: 0.02
