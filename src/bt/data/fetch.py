@@ -31,6 +31,7 @@ SOURCE_REGISTRY: dict[str, str] = {
     "binance_vision": "bt.data.sources.binance_vision:BinanceVisionSource",
     "coinalyze": "bt.data.sources.coinalyze:CoinalyzeSource",
     "coinglass": "bt.data.sources.coinglass:CoinglassSource",
+    "coinank": "bt.data.sources.coinank:CoinankSource",
 }
 
 
