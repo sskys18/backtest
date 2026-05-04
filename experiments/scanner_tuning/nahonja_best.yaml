@@ -1,8 +1,8 @@
 best_params:
-  score_threshold: 38
-best_score: 0.1512603847882049
+  score_threshold: 30
+best_score: 0.1964539452202111
 fwd_horizon_bars: 12
-n_signals: 421
+n_signals: 463
 n_trials: 200
 scanner: nahonja
 sl_pct: 0.01
