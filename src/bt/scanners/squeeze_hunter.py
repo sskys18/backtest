@@ -1,5 +1,7 @@
 """squeeze-hunter scanner port.
 
+Source: https://akakin83.github.io/squeeze-hunter/
+
 APPROXIMATION: original validation-layer weights are private. This port uses
 four tunable layers inferred from public UI text: OI velocity, CVD agreement,
 liquidation spike, and top-trader LSR confirmation.

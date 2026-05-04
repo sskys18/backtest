@@ -1,5 +1,7 @@
 """alpha-hunter scanner port.
 
+Source: https://akakin83.github.io/alpha-hunter/
+
 APPROXIMATION: original Stage Gate formulas, weights, and private conditions
 are not public. This port uses the derived `stage` feature from
 `features/stage_gate.py`, which combines OI z-score, CVD slope, and funding

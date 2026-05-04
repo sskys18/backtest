@@ -1,5 +1,7 @@
 """alpha-terminal scanner port.
 
+Source: https://akakin83.github.io/alpha-terminal/
+
 APPROXIMATION: original 18-factor Alpha Score weights are private. This port
 uses five tunable factors inferred from public UI text:
 close above VWAP, relative strength, liquidation z-score, OI z-score, and

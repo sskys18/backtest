@@ -1,5 +1,7 @@
 """nahonja-scanner port.
 
+Source: https://akakin83.github.io/nahonja-scanner/
+
 APPROXIMATION: original 8-signal weights are private. This port maps public UI
 labels to nearest available factors: momentum, taker volume, OI build,
 compression, funding extreme, OI/CVD divergence, liquidation bounce, and early
