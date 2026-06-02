@@ -26,6 +26,16 @@ required-features = ["collector"]
 name = "edge_check"
 required-features = ["edgecheck"]
 
+# 글로벌 반도체 -> KR 테크 lead/lag — gap vs intra vs fwd 분해. edgecheck feature 필요.
+[[bin]]
+name = "leadlag"
+required-features = ["edgecheck"]
+
+# 포지셔널 스마트머니 누적 → forward 아웃퍼폼 검증. edgecheck feature 필요.
+[[bin]]
+name = "positional_check"
+required-features = ["edgecheck"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
