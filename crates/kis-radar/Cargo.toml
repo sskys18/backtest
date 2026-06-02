@@ -67,6 +67,12 @@ required-features = ["edgecheck"]
 name = "dashboard"
 required-features = ["edgecheck"]
 
+# MACRO/exogenous → directional LONG/SHORT/FLAT 검증 — 삼전·하닉, 양다리(현물 롱 + perp 숏 프록시),
+# OOS train(2022-23 bear)/test(2024-26 supercycle), short-funding 포함. edgecheck feature 필요.
+[[bin]]
+name = "macro_signal"
+required-features = ["edgecheck"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
