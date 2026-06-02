@@ -1,0 +1,15 @@
+# 두 번째 maturin 모듈 — 순수 엔진을 `kis_radar`로 빌드.
+# 루트 pyproject(bt.bt_engine)와 분리. 빌드:
+#   cd crates/kis-radar && maturin develop --features python
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "kis-radar"
+requires-python = ">=3.14"
+dynamic = ["version"]
+
+[tool.maturin]
+module-name = "kis_radar"
+features = ["python"]
