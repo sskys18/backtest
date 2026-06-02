@@ -31,16 +31,31 @@ required-features = ["edgecheck"]
 name = "leadlag"
 required-features = ["edgecheck"]
 
+# 하루텀 swing(1~수일 HOLD) 일봉 신호 검증 — 삼전·하닉, edge-over-buy-hold + OOS. edgecheck feature 필요.
+[[bin]]
+name = "swing_check"
+required-features = ["edgecheck"]
+
 # 포지셔널 스마트머니 누적 → forward 아웃퍼폼 검증. edgecheck feature 필요.
 [[bin]]
 name = "positional_check"
+required-features = ["edgecheck"]
+
+# 단타 인트라데이 타이밍 신호 검증 — 삼전·하닉 1분봉. edgecheck feature 필요.
+[[bin]]
+name = "daytrade_check"
+required-features = ["edgecheck"]
+
+# 추세 오버레이 vs 매수보유 — 타이밍이 보유를 이기는가. edgecheck feature 필요.
+[[bin]]
+name = "trend_overlay"
 required-features = ["edgecheck"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 serde_json = { version = "1", optional = true }
-kis-adapter = { path = "../../../korea-stock", optional = true }
+kis-adapter = { package = "korea-stock", path = "../../../korea-stock", optional = true }
 tokio = { version = "1", optional = true, features = ["rt-multi-thread", "macros", "time"] }
 pyo3 = { version = "0.28", optional = true, features = ["extension-module"] }
 chrono = { version = "0.4", optional = true }

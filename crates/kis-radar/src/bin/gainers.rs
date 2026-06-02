@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use kis_adapter::external::KrxClient;
+use kis_adapter::kis::external::KrxClient;
 
 fn num(s: &str) -> f64 {
     s.chars()

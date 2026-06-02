@@ -30,8 +30,8 @@
 
 use std::collections::HashMap;
 
-use kis_adapter::domestic_stock::Period;
-use kis_adapter::overseas_stock::{OverseasExchange, OverseasPeriod};
+use kis_adapter::kis::domestic_stock::Period;
+use kis_adapter::kis::overseas_stock::{OverseasExchange, OverseasPeriod};
 use kis_adapter::{KisClient, KisConfig, Market};
 
 /// KIS comma-string → f64.

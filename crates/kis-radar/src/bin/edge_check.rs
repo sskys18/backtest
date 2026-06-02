@@ -17,7 +17,7 @@
 use std::collections::HashMap;
 
 use chrono::{Datelike, NaiveDate, Weekday};
-use kis_adapter::external::KrxClient;
+use kis_adapter::kis::external::KrxClient;
 
 /// 하루치 횡단면 데이터.
 struct DayData {

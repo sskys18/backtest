@@ -24,7 +24,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{Duration, Local, NaiveDate};
-use kis_adapter::external::KrxClient;
+use kis_adapter::kis::external::KrxClient;
 use kis_adapter::{KisClient, KisConfig, Market};
 
 /// 콤마 문자열 → f64 (부호 보존).

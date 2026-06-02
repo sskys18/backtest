@@ -11,8 +11,8 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use kis_adapter::domestic_stock::MinuteCandle;
-use kis_adapter::external::KrxClient;
+use kis_adapter::kis::domestic_stock::MinuteCandle;
+use kis_adapter::kis::external::KrxClient;
 use kis_adapter::{KisClient, KisConfig, Market};
 use kis_radar::{NameSnap, RotationConfig, RotationEngine, RotationSnapshot};
 
