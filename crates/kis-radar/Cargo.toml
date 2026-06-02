@@ -51,6 +51,16 @@ required-features = ["edgecheck"]
 name = "trend_overlay"
 required-features = ["edgecheck"]
 
+# 인트라데이 회전+velocity 진단/검증 — 분봉. edgecheck feature 필요.
+[[bin]]
+name = "intraday_check"
+required-features = ["edgecheck"]
+
+# 기간 수익률+breadth. edgecheck feature 필요.
+[[bin]]
+name = "gainers"
+required-features = ["edgecheck"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
