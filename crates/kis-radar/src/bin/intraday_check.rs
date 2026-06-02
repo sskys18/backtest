@@ -185,10 +185,14 @@ fn mean(xs: &[f64]) -> f64 {
 
 /// velocity 리더 forward-return 검증 — 여러 날 누적, (L,H) 분 그리드.
 fn validate(all: &[(String, Series)]) {
-    println!("\n=== velocity-leader forward-return (across {} days) ===", all.len());
+    // 진입 lag(분): 신호는 t분 종료시 확정 → 라이브선 t+lag에 체결(추격). 0=lookahead(비현실).
+    let lag: u32 = std::env::var("INTRADAY_ENTRY_LAG").ok().and_then(|s| s.parse().ok()).unwrap_or(1);
+    // 왕복비용(bps): 거래세 매도 20bps(2026 코스피·코스닥) + 슬리피지. net% = lead% − cost.
+    let cost_bps: f64 = std::env::var("INTRADAY_COST_BPS").ok().and_then(|s| s.parse().ok()).unwrap_or(50.0);
+    println!("\n=== velocity-leader forward-return (across {} days, entry_lag={lag}min, cost={cost_bps}bps) ===", all.len());
     println!(
-        "{:>4} {:>4} {:>6} {:>9} {:>9} {:>9} {:>7} {:>6}",
-        "L", "H", "n", "lead%", "univ%", "excess%", "t", "hit%"
+        "{:>4} {:>4} {:>6} {:>9} {:>9} {:>9} {:>9} {:>7} {:>6}",
+        "L", "H", "n", "lead%", "net%", "univ%", "excess%", "t", "hit%"
     );
     let cfg = RotationConfig::default();
     for l in [20u32, 30, 60] {
@@ -199,9 +203,11 @@ fn validate(all: &[(String, Series)]) {
             for (_date, series) in all {
                 // 세션 0900(540)~1530(930). 결정점 step 10.
                 let mut t = 540 + l;
-                while t + h <= 930 {
+                // 진입 t+lag, 청산 t+lag+h. lookahead 제거(신호는 t에 확정, 체결은 t+lag).
+                while t + lag + h <= 930 {
                     let base = snapshot_at(series, t - l, 0);
                     let now = snapshot_at(series, t, 1);
+                    let (ent, exit) = (t + lag, t + lag + h);
                     if let Ok(rep) = RotationEngine::analyze(&[base, now.clone()], cfg) {
                         let leaders: Vec<&str> =
                             rep.leaders.iter().take(5).map(|x| x.code.as_str()).collect();
@@ -209,7 +215,7 @@ fn validate(all: &[(String, Series)]) {
                             let lret: Vec<f64> = leaders
                                 .iter()
                                 .filter_map(|c| {
-                                    Some(price_at(series, c, t + h)? / price_at(series, c, t)? - 1.0)
+                                    Some(price_at(series, c, exit)? / price_at(series, c, ent)? - 1.0)
                                 })
                                 .collect();
                             let uret: Vec<f64> = now
@@ -217,8 +223,8 @@ fn validate(all: &[(String, Series)]) {
                                 .iter()
                                 .filter_map(|n| {
                                     Some(
-                                        price_at(series, &n.code, t + h)?
-                                            / price_at(series, &n.code, t)?
+                                        price_at(series, &n.code, exit)?
+                                            / price_at(series, &n.code, ent)?
                                             - 1.0,
                                     )
                                 })
@@ -245,10 +251,12 @@ fn validate(all: &[(String, Series)]) {
             };
             let t_stat = if sd > 0.0 { m / (sd / (n as f64).sqrt()) } else { 0.0 };
             let hit = excess.iter().filter(|x| **x > 0.0).count() as f64 / n as f64;
+            let lead_pct = mean(&lead_acc) * 100.0;
+            let net_pct = lead_pct - cost_bps / 100.0;
             println!(
-                "{:>4} {:>4} {:>6} {:>9.3} {:>9.3} {:>9.3} {:>7.2} {:>6.1}",
+                "{:>4} {:>4} {:>6} {:>9.3} {:>9.3} {:>9.3} {:>9.3} {:>7.2} {:>6.1}",
                 l, h, n,
-                mean(&lead_acc) * 100.0, mean(&univ_acc) * 100.0, m * 100.0,
+                lead_pct, net_pct, mean(&univ_acc) * 100.0, m * 100.0,
                 t_stat, hit * 100.0
             );
         }
