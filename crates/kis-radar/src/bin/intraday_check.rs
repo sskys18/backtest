@@ -83,13 +83,21 @@ async fn build_series(
     date: &str,
     mkt: &str,
     topn: usize,
+    codes: Option<&std::collections::HashSet<String>>,
 ) -> Result<Series, Box<dyn std::error::Error>> {
     let mut rows = krx.all_stock_ohlcv(date, mkt).await?;
     if rows.is_empty() {
         return Ok(Series::new());
     }
-    rows.sort_by(|a, b| num(&b.trade_value).total_cmp(&num(&a.trade_value)));
-    rows.truncate(topn);
+    match codes {
+        // 명시 코호트 — 그 종목만(이름·거래대금은 전종목시세에서).
+        Some(set) => rows.retain(|r| set.contains(&r.code)),
+        // 기본 — 거래대금 상위 N.
+        None => {
+            rows.sort_by(|a, b| num(&b.trade_value).total_cmp(&num(&a.trade_value)));
+            rows.truncate(topn);
+        }
+    }
 
     let mut series: Series = HashMap::new();
     for r in &rows {
@@ -257,6 +265,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(20);
+    // 명시 코호트 — 설정시 거래대금 top-N 대신 이 종목들로 유니버스 고정.
+    let codes: Option<std::collections::HashSet<String>> = std::env::var("INTRADAY_CODES")
+        .ok()
+        .map(|s| s.split(',').map(|c| c.trim().to_string()).collect());
 
     let kis = KisClient::new(KisConfig::from_env()?)?;
     let krx = KrxClient::from_env().map_err(|e| format!("KRX_ID/KRX_PW: {e}"))?;
@@ -264,7 +276,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut all = Vec::new();
     for date in dates.split(',') {
         let date = date.trim().to_string();
-        match build_series(&kis, &krx, &date, &mkt, topn).await {
+        match build_series(&kis, &krx, &date, &mkt, topn, codes.as_ref()).await {
             Ok(series) if series.len() >= 3 => {
                 print_timeline(&date, &mkt, topn, &series);
                 all.push((date, series));
