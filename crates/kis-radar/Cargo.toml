@@ -61,6 +61,12 @@ required-features = ["edgecheck"]
 name = "gainers"
 required-features = ["edgecheck"]
 
+# 드라이버 모니터링 대시보드 — 삼전·하닉의 KRX 현물·수급, Binance KR-perp,
+# 글로벌 반도체를 한 화면에. 의사결정 보조용(매수/매도 신호 아님). edgecheck feature 필요.
+[[bin]]
+name = "dashboard"
+required-features = ["edgecheck"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
