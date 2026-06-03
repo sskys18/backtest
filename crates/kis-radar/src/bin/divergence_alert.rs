@@ -15,12 +15,37 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use chrono::{Timelike, Utc};
 use kis_adapter::{KisClient, KisConfig, Market};
 
 type Dyn = Box<dyn std::error::Error>;
 
 fn num(s: &str) -> f64 {
     s.chars().filter(|c| *c != ',' && !c.is_whitespace()).collect::<String>().parse().unwrap_or(0.0)
+}
+
+/// 현재 KST 분(자정 기준). UTC+9.
+fn kst_minute_of_day() -> u32 {
+    let kst = Utc::now() + chrono::Duration::hours(9);
+    kst.hour() * 60 + kst.minute()
+}
+
+/// 알림 발송 — TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID 있으면 텔레그램, 항상 터미널.
+/// curl 사용(추가 의존성 없음). 실패는 무시(best-effort).
+fn notify(text: &str) {
+    print!("\x07"); // 터미널 벨
+    println!("{text}");
+    if let (Ok(token), Ok(chat)) = (
+        std::env::var("TELEGRAM_BOT_TOKEN"),
+        std::env::var("TELEGRAM_CHAT_ID"),
+    ) {
+        let url = format!("https://api.telegram.org/bot{token}/sendMessage");
+        let _ = std::process::Command::new("curl")
+            .args(["-s", "-m", "5", "-d", &format!("chat_id={chat}"), "--data-urlencode"])
+            .arg(format!("text={text}"))
+            .arg(url)
+            .output();
+    }
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -73,8 +98,20 @@ async fn main() -> Result<(), Dyn> {
         codes
     );
 
+    // 장 운영 창(가집계 유효): 09:00(540)~15:30(930). 무인(launchd) 가동시 15:40 후 자동종료.
+    let auto_exit = env_or("ALERT_AUTO_EXIT", "1") == "1";
     let mut state: HashMap<String, State> = HashMap::new();
     loop {
+        let kmin = kst_minute_of_day();
+        if auto_exit && kmin >= 940 {
+            eprintln!("장 마감(KST {:02}:{:02}) — 종료", kmin / 60, kmin % 60);
+            break;
+        }
+        if !(540..=930).contains(&kmin) {
+            eprintln!("장외(KST {:02}:{:02}) — 대기", kmin / 60, kmin % 60);
+            tokio::time::sleep(Duration::from_secs(interval.max(60))).await;
+            continue;
+        }
         for code in &codes {
             let Some((ctrt, frgn)) = probe(&kis, code).await else {
                 eprintln!("  {code}: 데이터 없음(장외?)");
@@ -97,11 +134,9 @@ async fn main() -> Result<(), Dyn> {
                     State::Accumulation => ("🟢 매집", "약세에 외국인 순매수 — 진입 근거 점검"),
                     State::Neutral => unreachable!(),
                 };
-                // 벨 + 강조.
-                print!("\x07");
-                println!(
+                notify(&format!(
                     "{tag}  {name}({code})  등락 {ctrt:+.2}%  외국인가집계 {frgn:+.0}  → {msg}"
-                );
+                ));
             } else {
                 eprintln!("  {name}({code}) 등락 {ctrt:+.2}% 외국인 {frgn:+.0} [{}]",
                     match new { State::Distribution => "분산", State::Accumulation => "매집", State::Neutral => "-" });
@@ -110,4 +145,5 @@ async fn main() -> Result<(), Dyn> {
         }
         tokio::time::sleep(Duration::from_secs(interval)).await;
     }
+    Ok(())
 }

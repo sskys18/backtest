@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 외국인 수급 다이버전스 알림기 — 평일(월~금) 08:55 KST 기동, 바이너리가 15:40 자동종료. -->
+<!-- 설치: cp 이 파일 ~/Library/LaunchAgents/ 후  launchctl load ~/Library/LaunchAgents/com.sskys.krdivergence.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sskys.krdivergence</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/sskys/Mine/backtest/scripts/run_divergence_alert.sh</string>
+  </array>
+
+  <!-- 월~금(1~5) 08:55 기동. 바이너리가 15:40 후 self-exit. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>55</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>55</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>55</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>55</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>55</integer></dict>
+  </array>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/krdivergence.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/krdivergence.err</string>
+</dict>
+</plist>
