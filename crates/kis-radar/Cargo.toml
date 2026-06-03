@@ -73,6 +73,11 @@ required-features = ["edgecheck"]
 name = "macro_signal"
 required-features = ["edgecheck"]
 
+# 외국인 수급 다이버전스 알림기(가격↑+외국인순매도=분산 / ↓+순매수=매집). edgecheck feature 필요.
+[[bin]]
+name = "divergence_alert"
+required-features = ["edgecheck"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
