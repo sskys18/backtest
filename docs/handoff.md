@@ -1,51 +1,59 @@
 # Session Handoff
-> Generated: 2026-06-04 10:30 (KST)
+> Generated: 2026-06-04 (KST) — 엔진 재설계(Approach A) + data-engine cleanup 세션
 
 ## Task
-KR 주식(삼성전자 005930 / SK하이닉스 000660 중심) 알파 탐색 — `korea-stock`(KIS+KRX+Binance 어댑터) 데이터를 `backtest/crates/kis-radar`(Rust, `--features edgecheck`)로 검증. 장세 = AI/HBM 슈퍼사이클·극단 집중(breadth 14%).
+**Superior backtest engine 설계·구축** — KOSPI 메이저 long-short on Hyperliquid `xyz` perp
+(삼전/하닉 vs NVDA/MU/TSM) + cross-sectional 섹터/종목 로테이션. 현 `bt-engine`은 long-only·
+단일종목이라 표현 불가. 설계 = `docs/specs/2026-06-04-kr-perp-portfolio-engine-design.md`.
 
 ## Status
-### Completed — 8각도 알파 탐색 전부 NULL (커밋됨)
-검증기(전부 `crates/kis-radar/src/bin/`, `--features edgecheck`, 읽기전용):
-- `edge_check`(일봉 횡단면 flow), `intraday_check`(1분봉 회전+velocity), `positional_check`(수급 누적 600일), `leadlag`(글로벌반도체→KR gap분해), `swing_check`(하루텀 OOS), `macro_signal`(매크로 롱+숏 OOS), `trend_overlay`(SMA), `gainers`(기간수익률+breadth), `flow_probe`(1분봉+가집계 관찰).
-- 결론: 가격·거래량·수급·크로스마켓·매크로·방향성 **전부 거래가능 엣지 없음**(비용·OOS·다중검정 후). 상세 = 메모리 `kr-tech-alpha-findings.md` + `experiments/intraday_surge_findings.md`.
-
-### 실용 산출물 (커밋됨)
-- `dashboard` — KRX현물+수급·Binance perp(펀딩/베이시스)·글로벌반도체 한화면 상황인식.
-- `divergence_alert` — **3종 경보**(분산/매집/대량유출입), 디바운스+텔레그램(env)+KST자동종료. release 빌드됨. launchd: `scripts/com.sskys.krdivergence.plist` + `scripts/run_divergence_alert.sh`. 라이브 검증 완료(🔴대량유출 발동 확인).
-
-### Completed — 9~12각도 NULL (Hyperliquid 24h perp, 2026-06-04 세션)
-"24h venue 삼전/하닉 롱숏 발라먹기" 검증. **데이터원 = Hyperliquid HIP-3 `xyz` DEX** (`xyz:SMSN`/`xyz:SKHX`/`xyz:HYUNDAI`+`xyz:NVDA/MU/TSM`, 2026-02-19~ **105일**; 바이낸스 perp는 06-02상장 2일치뿐=백테스트불가). 무인증 API `POST api.hyperliquid.xyz/info`. 스크립트 `experiments/perp/*.py`(데이터 JSON은 gitignore, 재현가능).
-- 9각도 24h 롱숏 전수(장중/오버나잇 fade/mom) — null, fade가설 死.
-- 10각도 오버나잇효과 — raw robust하나 시간중립화(오버나잇27.7h vs 장중6.0h)시 알파t 1.2(임계2.0 미달)=베타+美반도체갭.
-- 11각도 세션경계 변동성 — vol은 09:00에 spike(실재)이나 방향예측력0=perp로 못먹음(옵션필요).
-- 12각도 스윙타이밍(trend/mom/dip/vol-target, 롱플랫&롱숏) — 매수보유 초과 0, 숏 박살. **타이밍<홀드.**
-- 드라이버: 오버나잇 무브 80%+ = 글로벌 반도체+리스크 베타(R²0.75~0.86), 매크로 독립증분 +2~3%뿐, KR고유 15~18%. 상세 = 메모리 `kr-tech-alpha-findings.md`(12각도 봉인).
-- 부산물 교정: HL 펀딩 ~23%/yr(바이낸스 상장스파이크 +120%와 무관, "숏=펀딩사형"은 바이낸스한정). `macro_signal.rs` 어댑터경로 빌드픽스(`kis::`→`domestic::kis::`).
+### Completed — 이번 세션
+- **설계 스펙 확정 (Approach A)**: panel-vectorized weight-matrix 시그널 + event-driven 멀티에셋
+  포트폴리오 엔진. self-review + **Codex spec-review** 통과(7 findings 반영). 커밋 `276166d`.
+- **data-engine 제거 → import-only** (커밋 `2c176a4`): `src/bt/data/sources/`(11 어댑터)·
+  `fetch.py`·`collect_liq.py`·`bt data fetch`·`bt collect-liq`·관련 테스트 9개·
+  `exchange-adapters/httpx/websockets` deps 삭제. 유지 = import/store/validate/schemas + 양 엔진.
+  `scripts/build_btc_scanner_features.py` import-only로 strip(liq zero-fill).
+- 문서 동기화(CLAUDE.md/architecture.md/data-coverage.md = import-only), `.gitignore`에
+  `.claude/`·`.playwright-mcp/`·`replay_final.json` 추가.
+- **검증**: `cargo test -p bt-engine` 28 pass / `pytest` 64 pass.
 
 ### In Progress
-- 없음. 시스템 알파 탐색 종결(12각도). KR-perp 우물 = HL 105일 좋은데이터로도 null.
+- 없음. 스펙이 **유저 sign-off 대기** 상태.
 
 ## Resume Here
-1. **새 알파는 미탐색 각도만** — WS sub-minute 미시구조(호가/체결강도, 라이브 기록만) 또는 DART 이벤트. **같은 8신호를 같은 레짐에 재탐색 금지(과적합).**
+1. **스펙 sign-off 받기** → 받으면 즉시 `writing-plans` 스킬로 P0–P4 실행계획 생성.
+   **계획 승인 전 엔진 코드 작성 금지**(brainstorming HARD-GATE). 스펙 §10 phase 순서:
+   P0 panel loader/session tagger/funding reader(import-only) → P1 Rust `PortfolioEngine`
+   + **2D PyO3 binding**(현 `python.rs`는 1D only) → P2 `PanelStrategy` API + pairs/CS-rotation
+   레퍼런스 2종 → P3 walk-forward(purged CV + DSR/PBO) → P4 CLI `bt backtest-panel`.
+2. 각 phase 끝 = `cargo test -p bt-engine` + `pytest` green 유지(크립토/PPO 경로 무손상).
 
 ## Decisions (do NOT revisit)
-- **시스템 알파 없음 = 확정** — 8각도·~300셀·다중검정 보정 후 생존 0. 엣지 = thesis/판단 + 포지셔닝(베타), 시스템 신호 아님.
-- **Binance = 숏 실행 venue, 알파 소스 아님** — KR 현물 숏 불가라 perp. (한때 "광맥"이라 본 것 철회.)
-- **dashboard/divergence_alert = 판단 보조, 매수/매도 신호 아님.**
-- **korea-stock 재구조화됨**: 패키지 `kis-adapter`→`korea-stock`, 도메인 `kis::` 하위(`kis_adapter::kis::domestic_stock`) + `toss`/`binance` 모듈. kis-radar dep = `kis-adapter = { package = "korea-stock", ... }`.
+- **Approach A 확정**: hybrid(vector panel 시그널 + event exec). B(per-asset 후합산) 기각=pairs/CS 불가,
+  C(풀 event 재작성) 기각=벡터속도·PPO경로 파괴·extend-in-place 위반.
+- **extend bt-engine = ADDITIVE**: `portfolio_engine.rs`/`run_panel()` 신규. `tick()`/`run()`/
+  `StepEngine`(PPO) 불변. **perp 회계는 spot 특수케이스 아님** — signed+collateral 독립 경로(Codex 지적).
+- **data fetching 이 repo서 제거** — siblings(korea-stock/upbit) 소유. 여긴 `bt data import`만.
+- **TradingAgents(LLM 멀티에이전트) 엔진으로 기각** (스펙 §13): 최근 KR 데이터 백테스트=training leakage로
+  가짜 알파. 허용 범위=forward-only thesis 레이어(DART+뉴스→방향성 bias), 절대 백테스트 대상 아님.
+- **시스템 알파 없음=확정**(12각도 OOS 생존 0). 엣지=thesis+포지셔닝(베타). 이 엔진은 *long-short/로테이션*
+  구조를 정직하게 백테스트하려는 것 — 같은 12신호·같은 레짐 재탐색 금지(과적합).
+- **KR-perp 데이터 = HL `xyz` DEX 105일**(바이낸스 2일 아님). 펀딩 HL ~23%/yr.
+- **시간중립 필수** — 오버나잇27.7h vs 장중6.0h 비대칭. Sharpe는 exposure-hour 가중(스펙 §8 공식).
 
 ## Gotchas
-- **⚠️ KIS 앱키 과거 세션 평문 노출** — 라이브 주문/무인가동 전 재발급 필수. 그래서 launchd 자동 load 안 함.
-- korea-stock는 유저가 활발히 편집 중(binance WIP). `examples/binance_kr_{quote,order}.rs`는 stub로 채웠다 유저가 실제 example로 덮음. 매니페스트 깨지면 누락 example 확인.
-- KIS 분봉 TR 단일콜 = 풀세션(~120봉,≈3분간격) 반환(부분 아님). 가집계(`investor_trend_estimate`)는 **시간대 버킷 2개만**(미세궤적 없음). `기관` 가집계 장중 0 자주.
-- Binance KR-perp = USD建(mark/spot ~1476×), FX소스 없어 basis% 미산출.
-- `CurrentPrice`엔 종목명 없음(`bstp_kor_isnm`=업종명). `prdy_ctrt`는 부호포함 → `prdy_vrss_sign`으로 정규화.
-- bin은 전부 `[[bin]] required-features=["edgecheck"]` 게이팅 필요(없으면 default 빌드 깨짐).
+- **coinank.py 삭제됨** — 이전 핸드오프의 "CoinAnk env 키" gotcha 무효. 키 갱신 필요시 sibling에서.
+- **PyO3 현재 1D array만** (`crates/bt-engine/src/python.rs`) — panel은 2D binding 신규 필요(P1).
+- **현 spot/cash 엔진은 perp 회계 베이스 재사용 불가** — signed qty/마진/펀딩 독립 구현.
+- **korea-stock 경로**: `kis_adapter::domestic::kis::{...}` + `kis_adapter::global::{binance,hyperliquid}`.
+  kis-radar bin들(dashboard 등) 구 경로라 깨짐(무관 — 이번 엔진작업과 별개).
+- bin 전부 `required-features=["edgecheck"]` 게이팅. `experiments/perp/*.json` gitignore.
+- **`add -A` 주의** — `.claude/`·`.playwright-mcp/` junk 휩쓸림(이제 gitignore됨).
 
 ## Context
-- **Branch**: main (backtest + korea-stock 둘다).
-- **Tests/빌드**: kis-radar 엔진 단위 7 통과; 전 bin `cargo clippy --features edgecheck -- -D warnings` 클린. `cargo test`(default)도 통과.
-- **실행**: `cargo run -p kis-radar --features edgecheck --bin <name>` + `set -a; . korea-stock/.env; set +a`.
-- **다른 파킹 스레드**: 크립토 스캐너 OOS 검증(2026-05-04, `src/bt/scanners/tune.py`) — git log 참조. 이번 세션과 무관.
-- **Unknowns**: Binance perp 향후 유동성/펀딩 추이; 환경의 KIS 데이터 시맨틱(분봉이 풀세션 반환되는 등).
+- **Branch**: main, origin = github.com/sskys18/backtest (private). HEAD **`2c176a4`**.
+- **Tests**: cargo bt-engine 28/28, pytest 64/64. venv = `.venv`(py3.14), `maturin develop`로 .so 빌드됨.
+- **메모리**: 프로젝트 decision 레이어에 Approach A 기록됨(`sspower-mem`). `kr-tech-alpha-findings.md`=12각도 봉인.
+- **Unknowns**(verify 전 가정 금지): HL `xyz` 유동성/존속(6에셋×105일 = OOS 표본 빈약, DSR/PBO 필수);
+  KIS 분봉 시맨틱(단일콜 풀세션); panel parquet 실제 스키마는 sibling 산출물 확인 후 확정.
