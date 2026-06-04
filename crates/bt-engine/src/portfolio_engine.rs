@@ -209,6 +209,17 @@ pub fn validate_bias(
                     av.len()
                 )));
             }
+            // Window-constant availability: a length-T available_at whose entries
+            // are all identical is "today's view stamped backward across the
+            // fold" — the §13 leak the two-layer gate exists to close. A direct
+            // run_panel caller bypasses bias.py's check, so the seam must reject
+            // it here too (not merely "in prose" / Python-only).
+            if t > 1 && av.iter().all(|&x| x == av[0]) {
+                return Err(EngineError::BiasRejected(
+                    "available_at is window-constant (all identical) — today's \
+                     view stamped backward is forbidden".into(),
+                ));
+            }
             for ti in 0..t {
                 if av[ti] > decision_time[ti] {
                     return Err(EngineError::BiasRejected(format!(

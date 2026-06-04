@@ -824,6 +824,23 @@ fn bias_nan_rejected() {
 }
 
 #[test]
+fn bias_window_constant_rejected() {
+    // A length-T available_at whose entries are all identical (and all <=
+    // decision_time, so the future check would pass) is "today's view stamped
+    // backward across the fold" — the §13 leak. The seam must reject it rather
+    // than apply the tilt; a direct run_panel caller bypasses bias.py's check.
+    let dt = [10i64, 20];
+    let b = [0.5, 0.5];
+    // av = [5, 5]: window-constant, both <= decision_time → must still REJECT.
+    let err = bias_run(Some(&b), Some(&[5, 5]), BiasMode::Backtest, &dt).unwrap_err();
+    if let EngineError::BiasRejected(msg) = &err {
+        assert!(msg.contains("window-constant"), "msg {}", msg);
+    } else {
+        panic!("expected BiasRejected for window-constant available_at, got {err:?}");
+    }
+}
+
+#[test]
 fn bias_valid_pit_accepted() {
     let dt = [10i64, 20];
     let b = [0.5, 0.5]; // adds a 0.5 long tilt
