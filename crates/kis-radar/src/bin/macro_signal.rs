@@ -55,8 +55,8 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use kis_adapter::kis::domestic_stock::Period;
-use kis_adapter::kis::overseas_stock::{OverseasExchange, OverseasPeriod};
+use kis_adapter::domestic::kis::domestic_stock::Period;
+use kis_adapter::domestic::kis::overseas_stock::{OverseasExchange, OverseasPeriod};
 use kis_adapter::{KisClient, KisConfig, Market};
 
 /// KIS comma-string → f64.
