@@ -93,6 +93,20 @@ def backtest(
     typer.echo(json.dumps(result, indent=2, default=str))
 
 
+# ── bt backtest-panel ─────────────────────────────────────────────────────────
+
+@app.command("backtest-panel")
+def backtest_panel(
+    panel: str = typer.Option(..., "--panel", help="Path to long-format panel parquet"),
+    config: str = typer.Option(..., "--config", help="Path to portfolio panel config YAML"),
+) -> None:
+    """Run a multi-asset panel backtest (loader → strategy → engine → report)."""
+    from bt.panel.report import run_panel_backtest
+
+    report_dict = run_panel_backtest(panel, config)
+    typer.echo(json.dumps(report_dict, indent=2, default=str))
+
+
 # ── bt report ─────────────────────────────────────────────────────────────────
 
 @app.command("report")
