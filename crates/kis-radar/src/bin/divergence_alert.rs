@@ -91,6 +91,8 @@ async fn main() -> Result<(), Dyn> {
         .split(',').map(|s| s.trim().to_string()).collect();
     let interval: u64 = env_or("ALERT_INTERVAL_SECS", "30").parse().unwrap_or(30);
     let thresh: f64 = env_or("ALERT_THRESH", "2.0").parse().unwrap_or(2.0);
+    // 대량유출/유입 — 외국인 가집계 절대값 임계(가격 무관). 기본 3M.
+    let flow_mag: f64 = env_or("ALERT_FLOW_MAG", "3000000").parse().unwrap_or(3e6);
 
     let kis = KisClient::new(KisConfig::from_env()?)?;
     eprintln!(
@@ -101,6 +103,8 @@ async fn main() -> Result<(), Dyn> {
     // 장 운영 창(가집계 유효): 09:00(540)~15:30(930). 무인(launchd) 가동시 15:40 후 자동종료.
     let auto_exit = env_or("ALERT_AUTO_EXIT", "1") == "1";
     let mut state: HashMap<String, State> = HashMap::new();
+    // 대량유출/유입 상태: -1 유출(대량매도) / +1 유입(대량매수) / 0 중립. 독립 디바운스.
+    let mut flow_state: HashMap<String, i8> = HashMap::new();
     loop {
         let kmin = kst_minute_of_day();
         if auto_exit && kmin >= 940 {
@@ -142,6 +146,17 @@ async fn main() -> Result<(), Dyn> {
                     match new { State::Distribution => "분산", State::Accumulation => "매집", State::Neutral => "-" });
             }
             state.insert(code.clone(), new);
+
+            // 대량유출/유입(가격 무관) — 독립 디바운스.
+            let fnew: i8 = if frgn <= -flow_mag { -1 } else if frgn >= flow_mag { 1 } else { 0 };
+            let fprev = flow_state.get(code).copied().unwrap_or(0);
+            if fnew != fprev && fnew != 0 {
+                let tag = if fnew < 0 { "🔴 대량유출" } else { "🔵 대량유입" };
+                notify(&format!(
+                    "{tag}  {name}({code})  외국인가집계 {frgn:+.0} (|.|>{flow_mag:.0})  등락 {ctrt:+.2}%"
+                ));
+            }
+            flow_state.insert(code.clone(), fnew);
         }
         tokio::time::sleep(Duration::from_secs(interval)).await;
     }
