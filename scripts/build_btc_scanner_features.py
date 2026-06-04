@@ -1,23 +1,20 @@
 """Build BTC-USDT scanner-tuning feature parquet.
 
-Joins canonical bt data (binance OHLCV, binance_vision metrics, funding,
-optional CoinAnk liquidations) into a single 5m-aligned parquet ready for
-`bt scanner-tune`.
+Joins already-imported bt data (binance OHLCV, binance_vision metrics, funding)
+into a single 5m-aligned parquet ready for `bt scanner-tune`. Reads parquet only —
+this repo no longer fetches; import data via `bt data import` first.
 
 Usage:
-  python scripts/build_btc_scanner_features.py [--with-liq]
+  python scripts/build_btc_scanner_features.py
 
-Without --with-liq: liquidation columns are zero-filled (degraded).
-With --with-liq: fetches real CoinAnk liquidations at 4h granularity and
-forward-fills to 5m bars. Requires CoinAnk to be reachable (no 403).
+Liquidation columns (liq_intensity/liq_z/liq_imbalance) are zero-filled. To use
+real liquidations, import a CoinAnk parquet and join it in build().
 
 Output: data/features/btc_usdt_scanner_tuning.parquet
 """
 from __future__ import annotations
 
 import argparse
-import asyncio
-from datetime import datetime, timezone
 from pathlib import Path
 
 import polars as pl
@@ -29,15 +26,7 @@ OUT_PATH = Path("data/features/btc_usdt_scanner_tuning.parquet")
 BUCKET_5M = 5 * 60 * 1000
 
 
-async def _fetch_coinank_liq(start: datetime, end: datetime) -> pl.DataFrame:
-    from bt.data.sources.coinank import CoinankSource
-    return await CoinankSource().fetch(
-        pair="BTC-USDT", data_type="liquidations", timeframe="4h",
-        start=start, end=end,
-    )
-
-
-def build(with_liq: bool) -> pl.DataFrame:
+def build() -> pl.DataFrame:
     ohlcv = pl.read_parquet(OHLCV_PATH)
     metrics = pl.read_parquet(METRICS_PATH)
     funding = pl.read_parquet(FUNDING_PATH)
@@ -71,47 +60,14 @@ def build(with_liq: bool) -> pl.DataFrame:
 
     df = df.with_columns(pl.lit(1.05).alias("rs_btc"))
 
-    if with_liq:
-        ts_min = ohlcv["timestamp"].min()
-        ts_max = ohlcv["timestamp"].max()
-        start_dt = datetime.fromtimestamp(ts_min / 1000, tz=timezone.utc)
-        end_dt = datetime.fromtimestamp(ts_max / 1000, tz=timezone.utc)
-        liq = asyncio.run(_fetch_coinank_liq(start_dt, end_dt))
-        if len(liq) == 0:
-            print("WARN: CoinAnk returned 0 rows. Falling back to zero-stub.")
-            df = df.with_columns([
-                pl.lit(0.0).alias("liq_intensity"),
-                pl.lit(0.0).alias("liq_z"),
-                pl.lit(0.0).alias("liq_imbalance"),
-            ])
-        else:
-            liq = liq.sort("timestamp").with_columns(
-                (pl.col("long_liq_usd") + pl.col("short_liq_usd")).alias("liq_intensity"),
-                pl.when((pl.col("long_liq_usd") + pl.col("short_liq_usd")) > 0)
-                    .then((pl.col("long_liq_usd") - pl.col("short_liq_usd"))
-                          / (pl.col("long_liq_usd") + pl.col("short_liq_usd")))
-                    .otherwise(0.0).alias("liq_imbalance"),
-            )
-            liq = liq.with_columns(
-                ((pl.col("liq_intensity") - pl.col("liq_intensity").rolling_mean(60))
-                 / pl.col("liq_intensity").rolling_std(60))
-                    .fill_nan(0.0).fill_null(0.0).alias("liq_z"),
-            )
-            df = df.sort("timestamp").join_asof(
-                liq.select(["timestamp", "liq_intensity", "liq_imbalance", "liq_z"]),
-                on="timestamp", strategy="backward",
-            )
-            df = df.with_columns([
-                pl.col("liq_intensity").fill_null(0.0),
-                pl.col("liq_imbalance").fill_null(0.0),
-                pl.col("liq_z").fill_null(0.0),
-            ])
-    else:
-        df = df.with_columns([
-            pl.lit(0.0).alias("liq_intensity"),
-            pl.lit(0.0).alias("liq_z"),
-            pl.lit(0.0).alias("liq_imbalance"),
-        ])
+    # Liquidation columns: zero-filled. Live fetching was removed (this repo is
+    # import-only). To use real liquidations, import a CoinAnk parquet via
+    # `bt data import` and join it here.
+    df = df.with_columns([
+        pl.lit(0.0).alias("liq_intensity"),
+        pl.lit(0.0).alias("liq_z"),
+        pl.lit(0.0).alias("liq_imbalance"),
+    ])
 
     df = df.with_columns(
         (pl.col("cvd") - pl.col("cvd").shift(12)).alias("_cvd_slope")
@@ -128,12 +84,9 @@ def build(with_liq: bool) -> pl.DataFrame:
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--with-liq", action="store_true",
-                   help="Fetch real CoinAnk liquidations (requires non-rate-limited access)")
-    args = p.parse_args()
+    argparse.ArgumentParser().parse_args()  # no flags; --help only
 
-    df = build(args.with_liq)
+    df = build()
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(OUT_PATH)
     nz = int((df["liq_intensity"] > 0).sum())

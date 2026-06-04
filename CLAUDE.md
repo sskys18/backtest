@@ -29,7 +29,8 @@ uv run bt strategies
 
 ### 1. OHLCV Backtest (generic strategies on candle data)
 ```bash
-bt data fetch --pair BTC-USDT --source binance --type ohlcv --timeframe 1h --start 2024-06-01 --end 2025-01-01
+# Data fetching lives in sibling repos (korea-stock / upbit). Import parquet here:
+bt data import --path /path/to/BTC-USDT-1h.parquet --type ohlcv
 bt backtest --config configs/strategies/momentum_v1.yaml
 ```
 
@@ -50,8 +51,9 @@ Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit p
 │  OHLCV Backtest Engine (bt backtest)        │  ← secondary workflow
 │  Python CLI → Strategy → Rust Engine        │
 ├─────────────────────────────────────────────┤
-│  Data Sources                               │
-│  Upbit, Bithumb, Binance (exchange-adapters)│
+│  Data: IMPORT-ONLY (no fetching here)       │
+│  parquet via `bt data import` (siblings own │
+│  fetching: korea-stock / upbit)             │
 ├─────────────────────────────────────────────┤
 │  Rust Core (crates/bt-engine/)              │
 │  tick(), run(), step() — PyO3/NumPy         │
@@ -63,10 +65,10 @@ Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit p
 - `crates/bt-engine/src/` — Rust engine (types, broker, portfolio, risk, tick, engine, step, python bindings)
 - `src/bt/replay/` — Scan replay backtester (loader, simulator, optimizer)
 - `src/bt/` — Python package (cli, config, data, features, strategy, backtest, report, experiment, optimize, rl)
-- `src/bt/data/sources/` — Exchange adapters (binance, bithumb, upbit)
+- `src/bt/data/` — Import-only data layer (import_, store, validate, schemas). No fetching — siblings own that.
 - `src/bt/rl/` — PPO reinforcement learning (env, train, policy_strategy)
 - `configs/` — YAML strategy configs
-- `tests/python/` — Python tests (36 tests)
+- `tests/python/` — Python tests (64 tests)
 - `experiments/` — goals.md + replay results + run artifacts
 - `data/raw/` — Parquet data store (gitignored)
 
@@ -74,7 +76,7 @@ Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit p
 
 - Rust crate uses feature `python` for PyO3 bindings (off by default for `cargo test`)
 - PyO3 0.28 / numpy 0.28 for Python 3.14
-- exchange-adapters is an editable dependency from sibling dir
+- Import-only: data fetching removed; siblings (korea-stock / upbit) produce parquet, `bt data import` ingests it
 - Polars for DataFrames, NumPy only at Rust boundary
 - Strategies return `strength` + `target_size` columns
 - All data stored as Parquet under `data/raw/{source}/{pair}/{type}/`
@@ -85,7 +87,7 @@ Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit p
 |---------|---------|
 | `bt replay` | Scan replay optimization (primary) |
 | `bt backtest` | OHLCV backtest with strategy |
-| `bt data fetch` | Pull data from exchanges |
+| `bt data import` | Import parquet/CSV into the store |
 | `bt data list` | List datasets |
 | `bt data validate` | Check data quality |
 | `bt features` | Build feature DataFrame |

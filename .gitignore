@@ -30,3 +30,8 @@ experiments/leaderboard.json
 
 # perp 분석 raw 데이터 (스크립트로 재현가능)
 experiments/perp/*.json
+
+# Local tooling / browser artifacts (not source)
+.claude/
+.playwright-mcp/
+experiments/replay_final.json
