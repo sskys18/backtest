@@ -4,7 +4,7 @@
 ## Task
 **Superior backtest engine 설계·구축** — KOSPI 메이저 long-short on Hyperliquid `xyz` perp
 (삼전/하닉 vs NVDA/MU/TSM) + cross-sectional 섹터/종목 로테이션. 현 `bt-engine`은 long-only·
-단일종목이라 표현 불가. 설계 = `docs/specs/2026-06-04-kr-perp-portfolio-engine-design.md`.
+단일종목이라 표현 불가. 설계 = `docs/specs/2026-06-04-multi-asset-quant-engine-design.md` (re-scoped: general quant, dual-horizon intraday+daily, agents=forward-only lane).
 
 ## Status
 ### Completed — 이번 세션
