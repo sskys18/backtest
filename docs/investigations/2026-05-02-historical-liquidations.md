@@ -38,9 +38,9 @@ Findings file dump: `~/.claude/projects/.../mcp-plugin_playwright_playwright-bro
 
 **Endpoint**: `GET https://api.coinank.com/api/liquidation/statistic?baseCoin=<COIN>&exchangeName=&interval=<INTERVAL>`
 
-**Auth**: requires header `coinank-apikey: <embedded browser key>`. Default key (subject to rotation):
+**Auth**: requires header `coinank-apikey: <browser key from coinank.com network tab>`, set via `COINANK_APIKEY` env (see `.env`):
 ```
-coinank-apikey: ***REMOVED***
+coinank-apikey: $COINANK_APIKEY
 client: web
 web-version: 102
 Origin: https://coinank.com

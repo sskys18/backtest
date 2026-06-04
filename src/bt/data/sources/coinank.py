@@ -1,6 +1,7 @@
-"""CoinAnk historical liquidation source (no API key required).
+"""CoinAnk historical liquidation source.
 
-Uses the embedded `coinank-apikey` browser key from coinank.com to call
+Requires `COINANK_APIKEY` in env (the `coinank-apikey` browser header from
+coinank.com — free, no signup; copy from the network tab). Calls
 `/api/liquidation/statistic` for aggregated long/short turnover per
 coin per exchange. Free, no signup, but limited to 180 buckets per call
 (pagination params ignored by server as of 2026-05-02).
@@ -40,9 +41,6 @@ import polars as pl
 
 
 _BASE = "https://api.coinank.com"
-_DEFAULT_KEY = (
-    "***REMOVED***"
-)
 _INTERVALS = {"5m", "15m", "30m", "1h", "4h", "12h", "1d"}
 
 
@@ -68,7 +66,12 @@ class CoinankSource:
         coin = _base_coin(pair)
         interval = _to_interval(timeframe)
         exchange = os.getenv("COINANK_EXCHANGE", "")
-        key = os.getenv("COINANK_APIKEY", _DEFAULT_KEY)
+        key = os.getenv("COINANK_APIKEY")
+        if not key:
+            raise RuntimeError(
+                "COINANK_APIKEY not set. Copy the `coinank-apikey` header from "
+                "coinank.com (network tab) into .env as COINANK_APIKEY=..."
+            )
 
         headers = {
             "User-Agent": (
