@@ -1,0 +1,38 @@
+# P2 reference config — intraday cross-sectional rotation (KR-perp universe).
+# Exercises: CrossSectionalStrategy + intraday session-aware path.
+panel:
+  universe: ["xyz:A", "xyz:B", "xyz:C", "xyz:D", "xyz:E", "xyz:F"]
+  bar_freq: "1m"
+  session_aware: true
+  numeraire: "USD"
+  funding: true
+  calendar: "trading_days"
+
+strategy:
+  kind: cross_sectional
+  params:
+    lookback: 30           # trailing momentum window (bars)
+    top_k: 2
+    bottom_k: 2
+    weighting: "equal"      # equal | score_prop | inverse_vol
+    sector_neutral: false
+    leverage_cap: 1.0
+    gate_session: 2         # only trade during the regular open session
+
+portfolio:
+  initial_collateral: 100000.0
+  fee_rate: 0.0005
+  slippage_bps: 2.0
+  im_rate: 0.1
+  mm_rate: 0.05
+  leverage_cap: 1.0
+  max_net: 1.0
+  max_per_asset: 0.5
+  rebalance_freq: 5         # rebalance every 5 bars
+  fill_model: "next_bar"
+  on_violation: "reject"
+  cap_kind: "hard"
+  numeraire_is_unit_fx: true
+
+metrics:
+  hours_per_year: 8760

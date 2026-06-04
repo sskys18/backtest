@@ -1,0 +1,37 @@
+# P2 reference config — intraday KR-perp pairs (dollar-neutral long/short).
+# Exercises: PairsStrategy + intraday session-aware path + funding (perp).
+panel:
+  universe: ["xyz:SMSN", "xyz:NVDA"]   # canonical sorted column order (C5)
+  bar_freq: "1m"
+  session_aware: true
+  numeraire: "USD"
+  funding: true                        # perp-enabled → funding_rate column required
+  calendar: "trading_days"
+
+strategy:
+  kind: pairs
+  params:
+    leg_long: 0        # index into sorted universe
+    leg_short: 1
+    lookback: 60       # trailing bars for spread z-score
+    entry_z: 1.5
+    gross: 1.0
+
+portfolio:
+  initial_collateral: 100000.0
+  fee_rate: 0.0005
+  slippage_bps: 2.0
+  im_rate: 0.1
+  mm_rate: 0.05
+  leverage_cap: 1.0
+  max_net: 0.05          # ~dollar-neutral
+  max_per_asset: 0.6
+  rebalance_freq: 1
+  fill_model: "next_bar"
+  on_violation: "reject"
+  cap_kind: "hard"
+  numeraire_is_unit_fx: true
+
+metrics:
+  # intraday → time-neutral Sharpe reported alongside raw (P2.5).
+  hours_per_year: 8760   # 24h perp

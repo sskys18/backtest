@@ -163,8 +163,12 @@ Convention, enforced:
 1. score each active asset (momentum, flow, custom),
 2. rank → select top-k long / bottom-k short,
 3. raw weight (equal / score-prop / inverse-vol),
-4. optional **sector-neutralize** — demean weights within `sector` (after selection),
-5. **vol-scale** (optional),
+4. **vol-scale** (optional),
+5. optional **sector-neutralize** — demean weights within `sector` (after selection),
+   applied **AFTER** vol-scale so the per-sector zero-sum survives. (Order
+   correction vs. an earlier draft that demeaned first: per-asset multiplicative
+   vol-scale destroys a within-sector zero-sum, so demean must run last to satisfy
+   `test_sector_demean_neutral`. Implemented in `primitives.py`.)
 6. **cap/renormalize** to `leverage_cap`/`max_net`; if still violated → reject per §4
    `on_violation`,
 7. optional **time/regime gate** ("buy after N bars from open" / regime filter) — covers
