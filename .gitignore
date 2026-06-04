@@ -35,3 +35,6 @@ experiments/perp/*.json
 .claude/
 .playwright-mcp/
 experiments/replay_final.json
+
+# codex review scratch
+.codex-review-*.txt

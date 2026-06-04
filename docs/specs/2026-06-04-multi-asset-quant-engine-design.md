@@ -68,6 +68,13 @@ Aligned multi-asset OHLCV. **Long format** parquet (one row per `(timestamp, ass
 Loaded → pivoted to wide arrays `close[T,N]`, `funding[T,N]`, … at the NumPy boundary
 (Rust gets contiguous `f64` matrices, same pattern as today).
 
+**Boundary contract (C5 — alignment is load-bearing).** `run_panel()` takes a canonical
+`assets: list[str]`; **every** matrix (`close`/`funding`/`fx`/`sector`/`bias`/`W`/active-mask)
+must share identical `(T,N)` shape and column order — mismatch is rejected at ingestion, not
+silently broadcast (a misaligned column maps weights to the wrong asset). An **active-mask
+`[T,N]` is required**; a bar that is `NaN`/inactive but carries nonzero `W` **hard-fails**;
+inactive zero-weight cells are skipped.
+
 **Universe membership over time** is explicit: a `(timestamp, asset, active)` mask so an
 asset absent for part of the window is `NaN`/inactive, not silently zero. Guards
 survivorship.
@@ -89,11 +96,13 @@ leg reference — handoff established HL funding ≈ 23%/yr, NOT Binance listing
   session computed in **Asia/Seoul (KST, UTC+9)**. `session: u8` enum — `0=closed,
   1=premarket, 2=open, 3=mid, 4=close, 5=overnight`. Enables session-conditioned weights
   (enter at open, flat overnight, ORB at session boundary) and exposure-hour metrics (§8).
-- **Mid-term / daily, `session_aware: false`** (default for daily bars) — each bar is
-  `2=open` on a trading day, `0=closed` on a non-trading day (24/7 crypto = always `2=open`);
-  no intraday session rules, no force-flat-at-close. Annualization uses the standard calendar
-  path (§8). KR-cash daily, crypto daily, and any session-agnostic panel run here with zero
-  intraday session machinery.
+- **Mid-term / daily, `session_aware: false`** (default for daily bars) — no intraday session
+  rules, no force-flat-at-close. Annualization uses the standard calendar path (§8).
+  **Calendar policy (C9 — pick one per panel, mixed rejected):** either (a) **trading-days-only**
+  — non-trading rows omitted, every row `2=open`, annualize with `periods_per_year=252`
+  (KR-cash) / `365` (24/7 crypto); or (b) **full-calendar** — include non-trading rows as
+  `0=closed` zero-return days, annualize with calendar `periods_per_year=365`. The return index
+  and `periods_per_year` must agree; the loader rejects a panel that mixes the two.
 
 The engine picks the path from config; neither is hardcoded. A daily KR-cash sector-rotation
 strategy and an intraday KR-perp pairs strategy run on the same engine, different config.
@@ -136,6 +145,19 @@ leverage/risk-cap violations). At `run_panel()` ingestion each row `W[t,:]` is v
 - Opt-in `on_violation: "renormalize"` config scales the row to the binding cap and logs;
   `"reject"` (default) hard-fails. No mode silently clamps.
 
+**Signal causality — the vectorized-lookahead guard (C4, critical).** `compute(panel)` receives
+the whole `(T×N)` panel, so next-bar fills stop *execution* lookahead but **not feature
+lookahead**: a strategy can compute `W[t]` from future rows (centered rolling window,
+`shift(−k)`, full-sample normalization) and the engine would happily backtest fake alpha.
+Convention, enforced:
+- `W[t]` is the decision made at **`decision_time[t]`**, knowable only from panel fields with
+  timestamp `≤ decision_time[t]`; the order fills at `open[t+1]` (§5).
+- `PanelView` helpers (rank, demean, vol-scale, rolling) are **trailing-only by default** —
+  any forward-looking transform requires explicit `lag`/`as_of` metadata.
+- **Tests:** inject a strategy whose `W[t]` depends on `close[t+k]` (future shift / centered
+  window) → the harness must flag it (perfect-foresight canary). Full-sample z-score without
+  `as_of` is rejected.
+
 ### 4.1 Cross-sectional rotation primitive
 `CrossSectionalStrategy(PanelStrategy)` base — at each rebalance `t`, **fixed order**:
 1. score each active asset (momentum, flow, custom),
@@ -157,17 +179,33 @@ short `xyz:NVDA` on spread z-score), `W` sums to ~0 gross-balanced.
 
 `PortfolioEngine` in `crates/bt-engine/src/portfolio_engine.rs`. Per-bar `step`:
 
-State: `cash`, `positions: {asset → qty}` (qty signed), `entry_price`, `equity`,
-`peak_equity`, per-asset `unrealized_pnl`, `funding_paid_cum`, `turnover_cum`.
+State: `collateral`, `positions: {asset → qty}` (qty signed), `entry_price`, `equity`,
+`peak_equity`, per-asset `unrealized_pnl`, `realized_pnl_cum`, `funding_paid_cum`,
+`fees_cum`, `turnover_cum`.
+
+**Account invariants (perp, NOT spot — C2).** The engine must hold these exactly; a spot-style
+implementation that debits full notional is wrong:
+- `equity = collateral + realized_pnl + unrealized_pnl + funding_pnl − fees`.
+- A fill changes **signed `qty`**, books **fees** and **realized PnL** on the closed portion,
+  and adjusts **collateral by margin posted/released** — it does **not** move full notional
+  through cash, and a short open does **not** credit short-sale proceeds as cash.
+- `unrealized_pnl_a = qty_a · (mark_a − entry_price_a)` (signed; short profits when mark falls).
+- `initial_margin = Σ_a |qty_a · price_a| · im_rate`, `maintenance_margin = Σ_a |notional_a| · mm_rate`.
+- Liquidation / force-reduce (§5 step 6) operates on these invariants, never on a spot cash model.
+- All terms in `numeraire` via `fx_rate[t]` (§3.4).
 
 **Strict per-bar order** (funding accrues on the position actually held over the interval,
 *before* any new fills; fills next-bar):
 1. **Funding accrual** on the **carried `t−1` book** (positions held over `[t−1,t]`):
-   `funding_pnl = −position_notional · funding_rate[t]`, sign per long/short. Computed on the
-   pre-fill book so newly-opened positions are not charged for an interval they did not span.
-   No-op when `funding_rate ≡ 0` (spot/cash).
+   `funding_pnl = −position_notional · funding_rate[t]`, sign per long/short. **Mark (C3):**
+   `position_notional` uses `close[t−1]` (or the exchange funding-settlement mark timestamped
+   at/before `t`) — **never `close[t]`**, which is unavailable at interval start (would be
+   same-bar lookahead). FX conversion uses the PIT `fx_rate` of the same mark timestamp.
+   Computed on the pre-fill book so newly-opened positions are not charged for an interval they
+   did not span. No-op when `funding_rate ≡ 0` (spot/cash).
 2. **Fill enqueued orders** from `t−1` at `open[t] + slippage` (next_bar model), pay taker
-   fee. Update `positions`, `cash`/`collateral`. (New positions begin accruing funding from
+   fee. Update `positions`, `collateral`, `fees_cum`, `realized_pnl_cum` per the §5 account
+   invariants (signed qty + margin, not full-notional cash). (New positions begin accruing funding from
    `t` onward, i.e. at the *next* bar's step 1.)
 3. **Mark-to-market** at `close[t]` → `equity`, per-asset `unrealized`, `peak_equity`.
    (All cash flows — funding step 1, MTM here, fees — booked in `numeraire` via `fx_rate[t]`,
@@ -184,11 +222,20 @@ State: `cash`, `positions: {asset → qty}` (qty signed), `entry_price`, `equity
    maintenance requirement): force-reduce existing positions toward the maintenance bound
    (enqueue de-risk orders for `t+1`, or `immediate` at `close[t]` if configured) — distinct
    from step 7, which only halts *new* exposure. Total wipeout → flat + halt.
-7. **Risk gates:** max gross, max net, per-asset cap, drawdown halt (existing risk config,
-   extended to portfolio) — breach halts new exposure.
+7. **Risk gates (hard vs soft — C7):** drawdown halt + **hard** caps (max gross/net/per-asset)
+   → **force-reduce** existing positions to the bound *every bar*, even between rebalances
+   (drift cannot park exposure above a hard cap until next rebalance). **Soft** caps → allow
+   drift within an explicit `cap_tolerance`, log the breach, correct at next rebalance. New
+   exposure halted on any breach. Which caps are hard vs soft is config.
 8. **Session rules** (intraday, `session_aware: true` only — skipped in daily mode): force-flat
    at configured session end (enqueue flatten for `t+1`, or `immediate` at session-close bar
    if configured).
+
+**Order priority & netting (C8).** Steps 5–8 can each enqueue orders for `t+1`; the existing
+broker is single-pending-order, so the portfolio path needs **per-asset netting** with a fixed
+priority: **liquidation/drawdown-halt > session-flat > margin force-reduce > hard-cap reduce >
+rebalance.** Before enqueue, cancel/net any lower-priority pending order for the same asset so
+a rebalance can never override a force-flat or liquidation.
 
 Returns: equity curve, per-asset trade log, `funding_pnl`, turnover, gross/net exposure
 series.
@@ -229,8 +276,11 @@ exposure, hit rate, **long/short attribution**. Always reported.
   because intraday exposure-hours are asymmetric. Raw and time-neutral side by side.
 
 **Time-neutral Sharpe — intraday only, precise definition.** Per-bar return `r_t = Δequity_t / equity_{t−1}`.
-Per-bar exposure-hours `h_t = Δt_bar(hours) · 1[gross_t > 0]` (flat bars contribute 0
-exposure but are NOT dropped from the return series). Define exposure-weighted moments:
+Per-bar exposure-hours `h_t = Δt_bar(hours) · 1[gross_t > 0]`. **Flat-bar handling (C10):**
+flat bars remain in the **raw** Sharpe series; in the **time-neutral** (exposure-weighted)
+moments their `h_t = 0` weight excludes them by construction — report **exposure coverage**
+(`Σ exposed-bar hours / Σ wall-clock hours`) alongside so the exclusion is visible. Define
+exposure-weighted moments:
 - `μ_h = Σ(r_t · h_t) / Σ h_t`, `σ_h = sqrt( Σ h_t·(r_t − μ_h)² / Σ h_t )`.
 - Annualization constant `A = HOURS_PER_YEAR / mean(h_t over exposed bars)`; per-bar
   Sharpe `μ_h/σ_h` scaled by `sqrt(A)`. `HOURS_PER_YEAR = 8760` (24h perp) — KR-cash
@@ -263,8 +313,13 @@ Config adds: `universe`, `bar_freq` (`1m`/`1h`/`1d`/…), `rebalance_freq`, `ses
   §4.1) exercised by **3 reference configs**: intraday pairs (KR-perp), intraday CS rotation,
   **and a daily/mid-term sector-rotation** (a `CrossSectionalStrategy` instance, not a new
   primitive — proves the daily path end-to-end). Integration-tested against the P1 binding.
-- **P3** — walk-forward harness (purged CV + DSR/PBO + horizon-scaled embargo).
-- **P4** — CLI wiring (`bt backtest-panel`) + mode-gated metrics report (daily + intraday).
+- **P2.5 / P3-pre** — **metrics core (C6):** Sharpe/Sortino/max_dd + **mode-gated annualization**
+  (daily 252/365 vs intraday exposure-hour, §8) ships **before** walk-forward, because DSR/PBO
+  consume the OOS Sharpe/return series. (Folded into P2 tail or P3 head — not P4.)
+- **P3** — walk-forward harness (purged CV + DSR/PBO + horizon-scaled embargo), built on the
+  P2.5 metrics.
+- **P4** — CLI wiring (`bt backtest-panel`) + **report presentation only** (the metrics already
+  exist from P2.5; P4 formats/exports them).
 Each phase ends with `cargo test -p bt-engine` + `pytest` green.
 
 **Out of P0–P4 entirely:** the forward-only thesis/agent layer (§13). It is a separate,
@@ -331,11 +386,15 @@ applied to historical bars, lets the backtest profit from knowing what happened 
 "overweight semis" derived in Jun-2026, applied to a Jan–Jun-2026 fold). That is exactly the
 leakage this section bans. Two hard rules close the hole:
 
-1. **Inside the backtest / walk-forward harness (§7): `bias` is FORBIDDEN by default.** A
-   backtest run rejects any non-null `bias` unless it is supplied as a **point-in-time series
-   `bias[t]`** where each `bias[t]` is provably derivable only from data available at `t`
-   (timestamped at production, subject to the same purge + embargo as any feature). A scalar
-   or window-constant bias is rejected — there is no "current view" in a backtest.
+1. **Inside the backtest / walk-forward harness (§7): `bias` is FORBIDDEN by default**, and the
+   gate is **mechanical, not a promise (C1)** — "derivable from data at `t`" can't be proven
+   from values alone (a user could paste hindsight numbers that pass a shape check). Bias must
+   arrive as a typed artifact: `{ bias_values[T,N], available_at[T], source_run_id,
+   generated_at, mode ∈ {backtest, forward} }`. A backtest run accepts it only if **every**
+   `available_at[t] ≤ decision_time[t]`, the `source_run_id` resolves to a **fold-local**
+   production manifest (bias generated using only that fold's train data), and the series passes
+   the same purge + embargo as any feature. A scalar / window-constant / missing-`available_at`
+   bias is **rejected** — there is no "current view" in a backtest.
 2. **Outside the backtest — live/paper forward-run mode only:** `bias` is injected as the
    thesis lane produces it, going forward from today. This is the *intended* use; it never
    touches a historical fold.
