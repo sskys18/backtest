@@ -1,59 +1,75 @@
 # Session Handoff
-> Generated: 2026-06-04 (KST) — 엔진 재설계(Approach A) + data-engine cleanup 세션
+> Generated: 2026-06-04 19:10 (KST) — spec re-scope → general quant engine + self-review + Codex review, all fixed
 
 ## Task
-**Superior backtest engine 설계·구축** — KOSPI 메이저 long-short on Hyperliquid `xyz` perp
-(삼전/하닉 vs NVDA/MU/TSM) + cross-sectional 섹터/종목 로테이션. 현 `bt-engine`은 long-only·
-단일종목이라 표현 불가. 설계 = `docs/specs/2026-06-04-multi-asset-quant-engine-design.md` (re-scoped: general quant, dual-horizon intraday+daily, agents=forward-only lane).
+**General multi-asset quant backtest engine** — backtest any cross-sectional / long-short /
+portfolio strategy across **both intraday and mid-term (daily)** horizons. KR-perp long-short
+on HL `xyz` perp = *first reference strategy*, not the definition. Spec =
+`docs/specs/2026-06-04-multi-asset-quant-engine-design.md`. **Spec is awaiting user sign-off.**
 
 ## Status
-### Completed — 이번 세션
-- **설계 스펙 확정 (Approach A)**: panel-vectorized weight-matrix 시그널 + event-driven 멀티에셋
-  포트폴리오 엔진. self-review + **Codex spec-review** 통과(7 findings 반영). 커밋 `276166d`.
-- **data-engine 제거 → import-only** (커밋 `2c176a4`): `src/bt/data/sources/`(11 어댑터)·
-  `fetch.py`·`collect_liq.py`·`bt data fetch`·`bt collect-liq`·관련 테스트 9개·
-  `exchange-adapters/httpx/websockets` deps 삭제. 유지 = import/store/validate/schemas + 양 엔진.
-  `scripts/build_btc_scanner_features.py` import-only로 strip(liq zero-fill).
-- 문서 동기화(CLAUDE.md/architecture.md/data-coverage.md = import-only), `.gitignore`에
-  `.claude/`·`.playwright-mcp/`·`replay_final.json` 추가.
-- **검증**: `cargo test -p bt-engine` 28 pass / `pytest` 64 pass.
+### Completed — this session
+- **Re-scoped spec** narrow→general (commit `38d72a2`): KR-perp demoted to first reference
+  strategy; dual-horizon gated by `bar_freq`/`session_aware`; sector agents = forward-only
+  thesis lane (§13). File renamed `kr-perp-portfolio-engine-design.md` →
+  `multi-asset-quant-engine-design.md`. Self-review fixed 11 findings (F1–F9 + 2 second-pass).
+- **Codex spec-review applied** (commit `21c103a`): Codex read the Rust source, returned 10
+  findings (2 blocker), all fixed — C1 mechanical bias-artifact gate, C2 perp account
+  invariants (`equity = collateral + realized + unrealized + funding − fees`), C3 funding mark
+  `close[t−1]` not `close[t]`, C4 vectorized feature-lookahead guard + canary test, C5 PyO3
+  boundary contract, C6 metrics-before-walk-forward, C7 hard/soft caps, C8 order priority,
+  C9 daily calendar policy, C10 time-neutral wording.
+- **Reference repos** saved: `docs/references/2026-06-04-engine-reference-repos.md` (borrow map:
+  qlib signal / nautilus exec / skfolio CPCV / TradingAgents forward-only). Verified stars+dates.
 
 ### In Progress
-- 없음. 스펙이 **유저 sign-off 대기** 상태.
+- None. Spec complete + reviewed twice + committed. **Awaiting user sign-off.**
 
 ## Resume Here
-1. **스펙 sign-off 받기** → 받으면 즉시 `writing-plans` 스킬로 P0–P4 실행계획 생성.
-   **계획 승인 전 엔진 코드 작성 금지**(brainstorming HARD-GATE). 스펙 §10 phase 순서:
-   P0 panel loader/session tagger/funding reader(import-only) → P1 Rust `PortfolioEngine`
-   + **2D PyO3 binding**(현 `python.rs`는 1D only) → P2 `PanelStrategy` API + pairs/CS-rotation
-   레퍼런스 2종 → P3 walk-forward(purged CV + DSR/PBO) → P4 CLI `bt backtest-panel`.
-2. 각 phase 끝 = `cargo test -p bt-engine` + `pytest` green 유지(크립토/PPO 경로 무손상).
+1. **Get spec sign-off** → on "go", run `writing-plans` skill to generate the P0–P4 execution
+   plan from spec §10. **No engine code before plan approval** (brainstorming HARD-GATE).
+   Phase order: P0 bar-freq-aware panel loader/session-tagger/funding-reader (import-only) →
+   P1 Rust `PortfolioEngine` + **2D PyO3 binding** (`python.rs` is 1D-only) → P2 `PanelStrategy`
+   + 3 reference configs → **P2.5 metrics core** (C6, before walk-forward) → P3 walk-forward
+   (purged CV + DSR/PBO) → P4 CLI `bt backtest-panel` + report.
+2. Each phase ends green: `cargo test -p bt-engine` (28) + `pytest` (64). Crypto/PPO paths
+   must stay untouched.
 
 ## Decisions (do NOT revisit)
-- **Approach A 확정**: hybrid(vector panel 시그널 + event exec). B(per-asset 후합산) 기각=pairs/CS 불가,
-  C(풀 event 재작성) 기각=벡터속도·PPO경로 파괴·extend-in-place 위반.
-- **extend bt-engine = ADDITIVE**: `portfolio_engine.rs`/`run_panel()` 신규. `tick()`/`run()`/
-  `StepEngine`(PPO) 불변. **perp 회계는 spot 특수케이스 아님** — signed+collateral 독립 경로(Codex 지적).
-- **data fetching 이 repo서 제거** — siblings(korea-stock/upbit) 소유. 여긴 `bt data import`만.
-- **TradingAgents(LLM 멀티에이전트) 엔진으로 기각** (스펙 §13): 최근 KR 데이터 백테스트=training leakage로
-  가짜 알파. 허용 범위=forward-only thesis 레이어(DART+뉴스→방향성 bias), 절대 백테스트 대상 아님.
-- **시스템 알파 없음=확정**(12각도 OOS 생존 0). 엣지=thesis+포지셔닝(베타). 이 엔진은 *long-short/로테이션*
-  구조를 정직하게 백테스트하려는 것 — 같은 12신호·같은 레짐 재탐색 금지(과적합).
-- **KR-perp 데이터 = HL `xyz` DEX 105일**(바이낸스 2일 아님). 펀딩 HL ~23%/yr.
-- **시간중립 필수** — 오버나잇27.7h vs 장중6.0h 비대칭. Sharpe는 exposure-hour 가중(스펙 §8 공식).
+- **General quant backtester, not KR-perp-specific** (user-locked this session). KR-perp =
+  first reference strategy. Engine is universe/horizon-agnostic.
+- **Dual-horizon, both first-class** — intraday (session-aware, perp funding, exposure-hour
+  Sharpe) + mid-term daily (252/365 annualization). Gated by `bar_freq`/`session_aware`.
+- **Sector-analysis agents = forward-only thesis lane** (§13), NEVER backtested. Backtesting
+  LLM agents on recent KR data = training-leakage = fake alpha; mid-term makes it worse.
+  Engine `bias[t]` seam is mechanically gated (C1) — fold-local PIT artifact only.
+- **Approach A** (LOCKED): panel-vectorized signal `(T×N)` → signed `W∈[−1,+1]` → event-driven
+  portfolio exec. B/C rejected. **extend bt-engine = ADDITIVE** — `portfolio_engine.rs` +
+  `run_panel()` new; `tick()`/`run()`/`StepEngine`(PPO) unchanged.
+- **Perp accounting = NEW path, not spot special case** — signed qty + collateral/margin +
+  funding, independent of the spot/cash `run()`. Account invariants now in §5 (C2).
+- **Data = import-only** — siblings (korea-stock/upbit) fetch; here `bt data import` only.
 
 ## Gotchas
-- **coinank.py 삭제됨** — 이전 핸드오프의 "CoinAnk env 키" gotcha 무효. 키 갱신 필요시 sibling에서.
-- **PyO3 현재 1D array만** (`crates/bt-engine/src/python.rs`) — panel은 2D binding 신규 필요(P1).
-- **현 spot/cash 엔진은 perp 회계 베이스 재사용 불가** — signed qty/마진/펀딩 독립 구현.
-- **korea-stock 경로**: `kis_adapter::domestic::kis::{...}` + `kis_adapter::global::{binance,hyperliquid}`.
-  kis-radar bin들(dashboard 등) 구 경로라 깨짐(무관 — 이번 엔진작업과 별개).
-- bin 전부 `required-features=["edgecheck"]` 게이팅. `experiments/perp/*.json` gitignore.
-- **`add -A` 주의** — `.claude/`·`.playwright-mcp/` junk 휩쓸림(이제 gitignore됨).
+- **Codex bridge flaked twice** before succeeding — first two dispatches died silently (printed
+  `prompt OK`, no session, empty `codex.log`). Third wrote durable `.codex-review-findings.txt`
+  (now gitignored via `.codex-review-*.txt` + removed). If re-running Codex, use a durable
+  output path, not a self-deleting tmpdir.
+- **PyO3 currently 1D-only** (`crates/bt-engine/src/python.rs`) — 2D `run_panel()` binding is
+  net-new in P1, gates P2 strategy integration tests.
+- **The vectorized-lookahead trap (C4)** is the subtle killer — `compute(panel)` sees the whole
+  `(T×N)`, so next-bar fill stops *execution* lookahead but not *feature* lookahead. Spec §4
+  mandates trailing-only helpers + a perfect-foresight canary test. Honor it in P2.
+- **Thin data** = reference-strategy risk, not engine: HL `xyz` 6 assets × 105 days → DSR/PBO
+  mandatory. Engine itself is universe-agnostic (richer KR-cash daily panels give more room).
+- **Commit chokepoint**: use `git -C <path> commit`, never `cd path; git commit` (hook blocks
+  the `;`). Bit this session.
 
 ## Context
-- **Branch**: main, origin = github.com/sskys18/backtest (private). HEAD **`2c176a4`**.
-- **Tests**: cargo bt-engine 28/28, pytest 64/64. venv = `.venv`(py3.14), `maturin develop`로 .so 빌드됨.
-- **메모리**: 프로젝트 decision 레이어에 Approach A 기록됨(`sspower-mem`). `kr-tech-alpha-findings.md`=12각도 봉인.
-- **Unknowns**(verify 전 가정 금지): HL `xyz` 유동성/존속(6에셋×105일 = OOS 표본 빈약, DSR/PBO 필수);
-  KIS 분봉 시맨틱(단일콜 풀세션); panel parquet 실제 스키마는 sibling 산출물 확인 후 확정.
+- **Branch**: main, origin = github.com/sskys18/backtest (private). HEAD **`21c103a`**.
+  **Not pushed** — local only (no push without explicit ask).
+- **Tests**: not run this session (docs-only changes). Last known green: cargo bt-engine 28/28,
+  pytest 64/64. venv `.venv` (py3.14), `.so` built via `maturin develop`.
+- **Unknowns** (verify before acting): HL `xyz` liquidity/longevity (OOS sample thin); KIS
+  minute semantics; **panel parquet real schema** — confirm against sibling output before P0
+  loader; whether the optional golden-parity test (N=1 ↔ spot `run()`) is worth building.
