@@ -78,6 +78,11 @@ required-features = ["edgecheck"]
 name = "divergence_alert"
 required-features = ["edgecheck"]
 
+# 1시간 관찰 — 1분봉 + 외국인 가집계 전체행(시간대 궤적). edgecheck feature 필요.
+[[bin]]
+name = "flow_probe"
+required-features = ["edgecheck"]
+
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
