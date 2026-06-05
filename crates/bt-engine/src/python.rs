@@ -1,10 +1,12 @@
-use numpy::{PyArray1, PyReadonlyArray1};
+use numpy::{PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use crate::engine::BacktestEngine as RustEngine;
 use crate::step::StepEngine as RustStepEngine;
 use crate::types::*;
+
+use crate::portfolio_engine as pe;
 
 #[pyclass(name = "BacktestEngine")]
 pub struct PyBacktestEngine {
@@ -240,9 +242,256 @@ impl PyStepEngine {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 2D panel binding (P1) — thin numpy → slice wrapper over portfolio_engine.
+// ---------------------------------------------------------------------------
+
+fn cfg_from_dict(cfg: &Bound<'_, PyDict>) -> PyResult<pe::PortfolioConfig> {
+    fn f(d: &Bound<'_, PyDict>, k: &str, default: f64) -> PyResult<f64> {
+        match d.get_item(k)? {
+            Some(v) => v.extract(),
+            None => Ok(default),
+        }
+    }
+    let initial_collateral = f(cfg, "initial_collateral", 100_000.0)?;
+    let fee_rate = f(cfg, "fee_rate", 0.0)?;
+    let slippage_bps = f(cfg, "slippage_bps", 0.0)?;
+    let im_rate = f(cfg, "im_rate", 0.1)?;
+    let mm_rate = f(cfg, "mm_rate", 0.05)?;
+    let leverage_cap = f(cfg, "leverage_cap", 1.0)?;
+    let max_net = f(cfg, "max_net", 1.0)?;
+    let max_per_asset = f(cfg, "max_per_asset", 1.0)?;
+    let rebalance_freq = match cfg.get_item("rebalance_freq")? {
+        Some(v) => v.extract::<usize>()?,
+        None => 1,
+    };
+    let fill_model = match cfg.get_item("fill_model")? {
+        Some(v) => match v.extract::<String>()?.as_str() {
+            "immediate" => pe::FillModel::Immediate,
+            "next_bar" => pe::FillModel::NextBar,
+            other => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "invalid fill_model: '{other}'"
+                )))
+            }
+        },
+        None => pe::FillModel::NextBar,
+    };
+    let session_aware = match cfg.get_item("session_aware")? {
+        Some(v) => v.extract::<bool>()?,
+        None => false,
+    };
+    let on_violation = match cfg.get_item("on_violation")? {
+        Some(v) => match v.extract::<String>()?.as_str() {
+            "reject" => pe::ViolationMode::Reject,
+            "renormalize" => pe::ViolationMode::Renormalize,
+            other => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "invalid on_violation: '{other}'"
+                )))
+            }
+        },
+        None => pe::ViolationMode::Reject,
+    };
+    let cap_kind = match cfg.get_item("cap_kind")? {
+        Some(v) => match v.extract::<String>()?.as_str() {
+            "hard" => pe::CapKind::Hard,
+            "soft" => {
+                let tol = f(cfg, "cap_tolerance", 0.0)?;
+                pe::CapKind::Soft { tolerance: tol }
+            }
+            other => {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "invalid cap_kind: '{other}'"
+                )))
+            }
+        },
+        None => pe::CapKind::Hard,
+    };
+    let numeraire_is_unit_fx = match cfg.get_item("numeraire_is_unit_fx")? {
+        Some(v) => v.extract::<bool>()?,
+        None => true,
+    };
+    Ok(pe::PortfolioConfig {
+        initial_collateral,
+        fee_rate,
+        slippage_bps,
+        im_rate,
+        mm_rate,
+        leverage_cap,
+        max_net,
+        max_per_asset,
+        rebalance_freq,
+        fill_model,
+        session_aware,
+        on_violation,
+        cap_kind,
+        numeraire_is_unit_fx,
+    })
+}
+
+/// Flatten a [T,N] f64 ArrayView into a row-major Vec, asserting shape.
+fn flat2(name: &str, arr: &PyReadonlyArray2<f64>, t: usize, n: usize) -> PyResult<Vec<f64>> {
+    let view = arr.as_array();
+    let (rows, cols) = (view.shape()[0], view.shape()[1]);
+    if rows != t || cols != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "{name} shape ({rows},{cols}) != (T={t},N={n})"
+        )));
+    }
+    let mut out = Vec::with_capacity(t * n);
+    for r in 0..t {
+        for c in 0..n {
+            out.push(view[[r, c]]);
+        }
+    }
+    Ok(out)
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+    assets, close, open, funding, fx, weights, active_mask, sessions,
+    decision_time, cfg, bias=None, bias_available_at=None, bias_mode="forbidden"
+))]
+#[allow(clippy::too_many_arguments)]
+fn run_panel<'py>(
+    py: Python<'py>,
+    assets: Vec<String>,
+    close: PyReadonlyArray2<'py, f64>,
+    open: PyReadonlyArray2<'py, f64>,
+    funding: PyReadonlyArray2<'py, f64>,
+    fx: PyReadonlyArray2<'py, f64>,
+    weights: PyReadonlyArray2<'py, f64>,
+    active_mask: PyReadonlyArray2<'py, f64>,
+    sessions: PyReadonlyArray2<'py, i64>,
+    decision_time: PyReadonlyArray1<'py, i64>,
+    cfg: &Bound<'py, PyDict>,
+    bias: Option<PyReadonlyArray2<'py, f64>>,
+    bias_available_at: Option<PyReadonlyArray1<'py, i64>>,
+    bias_mode: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let cv = close.as_array();
+    let t = cv.shape()[0];
+    let n = cv.shape()[1];
+    if assets.len() != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "len(assets)={} != N={} (close columns)",
+            assets.len(),
+            n
+        )));
+    }
+
+    let close_v = flat2("close", &close, t, n)?;
+    let open_v = flat2("open", &open, t, n)?;
+    let funding_v = flat2("funding", &funding, t, n)?;
+    let fx_v = flat2("fx", &fx, t, n)?;
+    let weights_v = flat2("weights", &weights, t, n)?;
+
+    // active_mask passed as f64 0/1 → bool.
+    let am_view = active_mask.as_array();
+    if am_view.shape()[0] != t || am_view.shape()[1] != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "active_mask shape ({},{}) != (T={t},N={n})",
+            am_view.shape()[0],
+            am_view.shape()[1]
+        )));
+    }
+    let mut active_v = Vec::with_capacity(t * n);
+    for r in 0..t {
+        for c in 0..n {
+            active_v.push(am_view[[r, c]] != 0.0);
+        }
+    }
+
+    let s_view = sessions.as_array();
+    if s_view.shape()[0] != t || s_view.shape()[1] != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "sessions shape ({},{}) != (T={t},N={n})",
+            s_view.shape()[0],
+            s_view.shape()[1]
+        )));
+    }
+    let mut sessions_v = Vec::with_capacity(t * n);
+    for r in 0..t {
+        for c in 0..n {
+            sessions_v.push(s_view[[r, c]] as u8);
+        }
+    }
+
+    let dt = decision_time.as_slice()?.to_vec();
+
+    let mode = match bias_mode {
+        "forbidden" => pe::BiasMode::Forbidden,
+        "backtest" => pe::BiasMode::Backtest,
+        "forward" => pe::BiasMode::Forward,
+        other => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "invalid bias_mode: '{other}'"
+            )))
+        }
+    };
+
+    let bias_v: Option<Vec<f64>> = match &bias {
+        Some(b) => Some(flat2("bias", b, t, n)?),
+        None => None,
+    };
+    let bias_av: Option<Vec<i64>> = match &bias_available_at {
+        Some(a) => Some(a.as_slice()?.to_vec()),
+        None => None,
+    };
+
+    let config = cfg_from_dict(cfg)?;
+
+    let result = pe::run_panel_core(
+        &assets,
+        t,
+        n,
+        &close_v,
+        &open_v,
+        &funding_v,
+        &fx_v,
+        &weights_v,
+        &active_v,
+        &sessions_v,
+        &dt,
+        &config,
+        bias_v.as_deref(),
+        bias_av.as_deref(),
+        mode,
+    )
+    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+
+    let d = PyDict::new(py);
+    d.set_item("equity", PyArray1::from_vec(py, result.equity))?;
+    d.set_item("gross_exposure", PyArray1::from_vec(py, result.gross_exposure))?;
+    d.set_item("net_exposure", PyArray1::from_vec(py, result.net_exposure))?;
+    d.set_item("funding_pnl", PyArray1::from_vec(py, result.funding_pnl))?;
+    d.set_item("turnover", PyArray1::from_vec(py, result.turnover))?;
+    d.set_item("realized_pnl", PyArray1::from_vec(py, result.realized_pnl))?;
+
+    let trades: Vec<Bound<'py, PyDict>> = result
+        .trades
+        .iter()
+        .map(|tr| {
+            let td = PyDict::new(py);
+            td.set_item("bar", tr.bar).unwrap();
+            td.set_item("asset", tr.asset).unwrap();
+            td.set_item("qty", tr.qty).unwrap();
+            td.set_item("price", tr.price).unwrap();
+            td.set_item("fee", tr.fee).unwrap();
+            td.set_item("fx", tr.fx).unwrap();
+            td
+        })
+        .collect();
+    d.set_item("trades", trades)?;
+
+    Ok(d)
+}
+
 #[pymodule]
 fn bt_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBacktestEngine>()?;
     m.add_class::<PyStepEngine>()?;
+    m.add_function(wrap_pyfunction!(run_panel, m)?)?;
     Ok(())
 }

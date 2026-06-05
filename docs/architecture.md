@@ -26,8 +26,8 @@ Two primary workflows: **Scan Replay** (microstructure signal optimization) and 
 │  replay/           (vectorized     (load data, run strategy, │
 │  rl/               Polars)          call Rust, save results) │
 ├─────────────────────────────────────────────────────────────┤
-│  Data Sources (exchange-adapters)                           │
-│  Upbit, Bithumb, Binance (async, editable dep)             │
+│  Data: IMPORT-ONLY (bt data import → parquet store)         │
+│  Fetching removed; siblings korea-stock / upbit produce it  │
 ├─────────────────────────────────────────────────────────────┤
 │                   Rust Engine (crates/bt-engine/)            │
 │                                                             │
@@ -148,10 +148,10 @@ Owns the **entire simulation loop**. Python never calls into Rust per-bar.
 ### Data Ingestion Pipeline
 
 ```
- Exchange APIs / CSV files
+ Parquet/CSV from sibling repos (korea-stock / upbit)
           │
           ▼
- bt data fetch / bt data import
+ bt data import
           │
           ▼
  bt data validate (schema check, monotonic ts, OHLC rules)
@@ -330,18 +330,19 @@ The primary alpha-finding tool. Replays bot scan events against 1min OHLCV data.
       └── Output: optimal entry rules + exit params + expected performance
 ```
 
-## Exchange Data Sources
+## Data Sources (removed — import-only)
 
 ```
- src/bt/data/sources/
-      ├── binance.py    — Futures OHLCV (paginated), funding rates, OI, trades
-      ├── bithumb.py    — Spot OHLCV for KRW cross-exchange
-      └── upbit.py      — Spot OHLCV with backward pagination (1min/1h)
+ Data FETCHING was removed from this repo (2026-06-04). It now lives in
+ sibling repos:
+   - korea-stock/   — KIS/KRX/Hyperliquid (KR equities + perp)
+   - upbit/         — Upbit/Binance/Bithumb crypto
 
- All use exchange-adapters (editable dep from sibling dir):
-   - Async HTTP via httpx
-   - Pydantic response models
-   - No API keys needed for public market data
+ This repo is import-only:
+   src/bt/data/import_.py  — bt data import (parquet/CSV → store)
+   src/bt/data/store.py    — normalize_and_save
+   src/bt/data/validate.py — schema validation
+   src/bt/data/schemas.py  — canonical schemas
 ```
 
 ## Reinforcement Learning (Phase 4)

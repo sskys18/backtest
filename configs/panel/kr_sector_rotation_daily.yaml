@@ -1,0 +1,46 @@
+# P2 reference config — DAILY sector rotation (KR cash).
+# Proves the daily path: session_aware:false, periods_per_year:252.
+# A CrossSectionalStrategy instance scoring sector ETFs on trailing momentum,
+# sector-neutralized, rebalanced weekly on daily bars.
+panel:
+  universe:
+    - "KRX:BANKS"
+    - "KRX:CHEM"
+    - "KRX:IT"
+    - "KRX:SHIP"
+    - "KRX:STEEL"
+    - "KRX:AUTO"
+  bar_freq: "1d"
+  session_aware: false        # daily path — no intraday session structure
+  numeraire: "KRW"
+  funding: false              # cash equities, no funding
+  calendar: "trading_days"
+
+strategy:
+  kind: cross_sectional
+  params:
+    lookback: 20              # ~1 month of trailing daily momentum
+    top_k: 2
+    bottom_k: 2
+    weighting: "inverse_vol"
+    vol_window: 20
+    sector_neutral: true
+    leverage_cap: 1.0
+
+portfolio:
+  initial_collateral: 100000000.0   # KRW
+  fee_rate: 0.0015
+  slippage_bps: 5.0
+  im_rate: 0.2
+  mm_rate: 0.1
+  leverage_cap: 1.0
+  max_net: 1.0
+  max_per_asset: 0.4
+  rebalance_freq: 5           # weekly on daily bars
+  fill_model: "next_bar"
+  on_violation: "reject"
+  cap_kind: "hard"
+  numeraire_is_unit_fx: true
+
+metrics:
+  periods_per_year: 252       # KR-cash daily annualization

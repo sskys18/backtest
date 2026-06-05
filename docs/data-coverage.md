@@ -1,5 +1,10 @@
 # Data Coverage Matrix - Scanner Replication
 
+> **Note (2026-06-04):** Data *fetching* was removed from this repo — it's now
+> import-only (`bt data import`). The coverage below describes data the bt store
+> consumes; producing it (exchange fetch) lives in `korea-stock` / `upbit`
+> siblings. Source-adapter references here are historical.
+
 Maps each akakin83 scanner plus londonpotato1/kimchi-audit-picks to the bt
 data types it requires.
 
