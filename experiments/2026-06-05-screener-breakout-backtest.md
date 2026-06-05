@@ -42,6 +42,16 @@ The breakout+volume signal genuinely shapes returns (real > placebo, repeatably)
 it is NOT the pure mechanic+luck the microstructure test was. But the shaping isn't
 enough to overcome cost + alt-bear drag: it makes losses smaller, not profits.
 
+## Regime-gate attempt (salvage try) — did NOT work
+Hypothesis: the signal works in BTC-uptrends (fold 1, the only consistent winner).
+Gate: only enter breakouts when BTC > its trailing 1-day MA (fixed, no tuning).
+- Single-shot OOS gated: +14.4% vs placebo −32.3% (real >> placebo persists).
+- 5-fold: 1/5 positive, median **−23.4%** (worse than ungated −11.7%).
+The 1-day-MA gate is too crude (on 48% of bars, not the profitable ones). Only
+fold 1 wins across all variants — and 60 days contains ~ONE real uptrend window,
+so a regime strategy can't be validated here (n≈1 regime). NOT pursued further:
+trying filters until one passes IS the overfitting this harness guards against.
+
 ## Takeaway
 Best-behaved signal of the session (passes placebo, content confirmed) yet still
 no tradeable OOS edge in this regime. This is precisely why the heat screener is
