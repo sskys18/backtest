@@ -2,14 +2,18 @@
 
 ## System Overview
 
-Two primary workflows: **Scan Replay** (microstructure signal optimization) and **OHLCV Backtest** (generic strategy backtesting).
+Three workflows: **Panel Quant Engine** (general multi-asset cross-sectional / long-short / portfolio backtesting — see dedicated section below), **Scan Replay** (crypto microstructure signal optimization), and **OHLCV Backtest** (single-asset strategy backtesting).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  PRIMARY: Scan Replay (bt replay)                           │
+│  Panel Quant Engine (bt backtest-panel)                     │
+│  panel (T×N) → signed W → event-driven portfolio →          │
+│  walk-forward OOS (purged CV + DSR/PBO)                      │
+├─────────────────────────────────────────────────────────────┤
+│  Scan Replay (bt replay)                                    │
 │  Bot scan logs → filter sweep → TP/SL grid → optimal rules │
 ├─────────────────────────────────────────────────────────────┤
-│  SECONDARY: OHLCV Backtest Pipeline                         │
+│  OHLCV Backtest Pipeline (single-asset)                     │
 │                                                             │
 │  ┌──────────┐   ┌───────────┐   ┌──────────┐   ┌────────┐ │
 │  │ bt data  │──▶│bt features│──▶│bt backtest│──▶│bt report│ │
@@ -43,6 +47,38 @@ Two primary workflows: **Scan Replay** (microstructure signal optimization) and 
 **Python prepares, Rust executes, Python analyzes.**
 
 No Python in the hot loop. Strategies are vectorized — they precompute signal columns for all bars in one pass, then Rust runs the full simulation at native speed.
+
+## Panel Quant Engine (Multi-Asset — general)
+
+The general engine (spec `docs/specs/2026-06-04-multi-asset-quant-engine-design.md`, Approach A). Additive to bt-engine: `tick()`/`run()`/`step()` (single-asset, long-only) are untouched; the panel path is a separate `PortfolioEngine` + `run_panel()` binding for signed multi-asset perp/spot portfolios.
+
+```
+ panel.parquet (long: timestamp, asset, OHLCV, funding, fx, session, sector)
+      │  src/bt/panel/loader.py  (long → wide [T,N], active-mask, C5 alignment, C9 calendar)
+      ▼
+ PanelStrategy.compute(PanelView) → W[T,N] ∈ [−1,+1]   (src/bt/panel/strategy.py, primitives.py)
+      │  trailing-only helpers + detect_lookahead canary (C4)
+      ▼  src/bt/panel/run.py → Rust run_panel()
+ ┌──────────────────────────────────────────────────────────┐
+ │  PortfolioEngine (crates/bt-engine/src/portfolio_engine.rs)│
+ │  per bar: funding(close[t−1], C3) → fill(open[t+1]) →      │
+ │  MTM(close[t]) → rebalance(W,equity) → margin → risk caps  │
+ │  → session-flat. Signed qty + collateral/margin (C2 equity │
+ │  invariant). C8 priority: liq > session > margin > cap >    │
+ │  rebalance. Bias PIT ingestion seam (C1).                  │
+ └──────────────────────────────────────────────────────────┘
+      │
+      ▼  src/bt/panel/metrics.py  (Sharpe/Sortino/maxDD/turnover/funding/attribution;
+      │  mode-gated annualization §8: daily 252/365 vs intraday time-neutral, C10)
+      ▼  src/bt/panel/walkforward.py  (rolling/anchored splits, purge + horizon-scaled embargo,
+      │  tune-on-train via Optuna TPE → freeze → eval-on-test → OOS-only)
+      ▼  src/bt/panel/stats.py  (Deflated Sharpe + PBO/CSCV + BH-FDR)
+      ▼  src/bt/panel/report.py  (OOS distribution, DSR, PBO, per-fold, attribution) → bt backtest-panel
+```
+
+**Bias / thesis lane (C1, §13).** `bias.py` gates an exogenous point-in-time bias as a leak-proof seam: forbidden by default; accepted only with per-bar `available_at[t] ≤ decision_time[t]`; `source_run_id` resolved **mechanically** against a `BiasRunRegistry` (registered actual train window used, not self-reported) + fingerprint tamper check. LLM sector-analysis agents are forward-only, never backtested — out of the engine boundary by design.
+
+**vs single-asset `tick()` path:** the panel engine does signed multi-asset positions with margin/funding; the legacy `run()`/`tick()` path below remains single-instrument long-only (binary long/flat). They share no state — additive by construction.
 
 ## Component Boundaries
 
@@ -376,6 +412,7 @@ The primary alpha-finding tool. Replays bot scan events against 1min OHLCV data.
 | **3** | Bayesian optimization (Optuna TPE) | **Done** |
 | **4** | PPO (Gymnasium env + Rust step API) | **Done** |
 | **5** | Scan replay backtester (microstructure signals) | **Done** |
+| **6** | Multi-asset panel quant engine (signed perp/spot, walk-forward OOS + DSR/PBO, bias gate) | **Done** |
 
 ## Key Design Decisions
 
@@ -387,5 +424,5 @@ The primary alpha-finding tool. Replays bot scan events against 1min OHLCV data.
 | `tick()` shared by batch + RL | Prevents logic duplication when adding PPO in Phase 4 |
 | NumPy not Arrow for MVP | Simpler to implement; Arrow zero-copy deferred |
 | leaderboard.json not SQLite | Single source of truth; SQLite adds a second |
-| Single instrument, long-only | Simplifies MVP; multi-pair and shorts deferred |
+| Single instrument, long-only (`tick()`/`run()` path) | Simplifies the single-asset MVP. Multi-asset + signed shorts live in the **separate, additive** panel engine (`run_panel()`), not by mutating `tick()` |
 | Feature gate for PyO3 | `cargo test` works without Python; `maturin develop` enables bindings |
