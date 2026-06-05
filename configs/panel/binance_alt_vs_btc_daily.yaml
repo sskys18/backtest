@@ -1,0 +1,46 @@
+# Experiment — long-only Binance-spot ALT momentum basket vs BTC buy-hold.
+# Question: can a cross-sectional alt basket beat holding BTC, incl. the recent
+# down market? Long-only (top_k longs, bottom_k=0). BTC is held OUT of the panel
+# (benchmark only). Survivorship caveat: klines serve only live symbols → a basket
+# that LOSES despite that tailwind is a trustworthy negative; a WIN is confounded.
+panel:
+  bar_freq: "1d"
+  session_aware: false        # daily path
+  numeraire: "USD"
+  funding: false              # spot, no funding
+  calendar: "trading_days"    # crypto trades every day → all session==2
+
+strategy:
+  kind: cross_sectional
+  params:
+    lookback: 30              # ~1 month trailing momentum
+    top_k: 10                 # basket of 10 strongest alts
+    bottom_k: 0               # LONG-ONLY (no short leg)
+    weighting: "equal"
+    sector_neutral: false     # single 'crypto' sector → demean would zero all weights
+    leverage_cap: 1.0         # fully invested long
+
+portfolio:
+  initial_collateral: 1000000.0     # USD
+  fee_rate: 0.001                   # 10 bps spot taker
+  slippage_bps: 5.0
+  im_rate: 1.0                      # spot, no leverage
+  mm_rate: 0.5
+  leverage_cap: 1.0
+  max_net: 1.0
+  max_per_asset: 0.25               # 10 longs => 0.1 each; headroom for thin bars
+  rebalance_freq: 7                 # weekly on daily bars (cut fee bleed)
+  fill_model: "next_bar"
+  on_violation: "renormalize"       # avoid rejects on early thin-universe bars
+  cap_kind: "hard"
+  numeraire_is_unit_fx: true
+
+metrics:
+  periods_per_year: 365             # crypto trades 365 d/yr
+
+walk_forward:
+  scheme: "rolling"
+  folds: 4
+  embargo: 5
+  purge: 5
+  budget: 1
