@@ -234,6 +234,118 @@ def test_oos_only_aggregation():
     )
 
 
+def _long_one_asset_strategy(params):
+    """Factory whose param changes which asset it longs (shape-differing).
+
+    Distinct ``asset`` values produce columns with genuinely DIFFERENT OOS
+    return SHAPES (not just scale), so a CSCV/PBO performance matrix built from
+    them is non-degenerate (per-column Sharpe cancels pure scale differences).
+    """
+    a = int(params.get("asset", 0))
+
+    def compute(pv):
+        from bt.panel.strategy import WeightMatrix
+        T, N = pv.close.shape
+        W = np.zeros((T, N))
+        W[:, a % N] = 0.5
+        return WeightMatrix(W, list(pv.assets))
+
+    return compute
+
+
+_WF_CFG = {
+    "initial_collateral": 10_000.0,
+    "fee_rate": 0.0,
+    "slippage_bps": 0.0,
+    "im_rate": 0.1,
+    "mm_rate": 0.05,
+    "leverage_cap": 2.0,
+    "max_net": 2.0,
+    "max_per_asset": 1.0,
+    "rebalance_freq": 1,
+    "numeraire_is_unit_fx": True,
+}
+
+
+def test_walk_forward_emits_dsr_pbo_inputs():
+    """FU1 — walk_forward returns the per-bar OOS series the stats fns need.
+
+    Three new keys feed stats.dsr / stats.pbo: ``oos_returns`` (per-fold per-bar
+    returns CONCATENATED — never equity-stitched), ``trial_sharpes`` (the search
+    cardinality, de-annualized), ``oos_perf_matrix`` (``[T_oos, C]``, one column
+    per distinct config re-run on the OOS segments).
+    """
+    p = _panel(T=80, N=4)
+    res = walk_forward(
+        p,
+        strategy_factory=_long_one_asset_strategy,
+        search_space={"asset": {"values": [0, 1, 2, 3]}},
+        run_cfg=_WF_CFG,
+        scheme="rolling",
+        n_folds=3,
+        embargo_bars=1,
+        purge_bars=1,
+        budget=4,
+        periods_per_year=252.0,
+        session_aware=False,
+    )
+
+    assert "oos_returns" in res and "trial_sharpes" in res and "oos_perf_matrix" in res
+
+    # oos_returns is the CONCATENATION of per-fold per-bar returns of the frozen
+    # candidate — recompute independently (no equity stitching across folds).
+    folds = make_folds(p.timestamp, scheme="rolling", n_folds=3,
+                       embargo_bars=1, purge_bars=1)
+    expected_ret = []
+    for i, f in enumerate(folds):
+        fr = res["folds"][i]
+        tp = _slice_panel(p, f.test_idx)
+        fn = _long_one_asset_strategy(fr["best_params"])
+        from bt.panel.run import _run_weights
+        from bt.panel.strategy import PanelView
+        out = _run_weights(tp, fn(PanelView(tp)).W, _WF_CFG)
+        eq = np.asarray(out["equity"], dtype=np.float64)
+        expected_ret.append(np.diff(eq) / eq[:-1])
+    expected_ret = np.concatenate(expected_ret)
+    got = np.asarray(res["oos_returns"], dtype=np.float64)
+    assert got.shape == expected_ret.shape
+    assert np.allclose(got, expected_ret)
+
+    # perf matrix: T_oos rows, C distinct-config columns (here 4 assets)
+    M = np.asarray(res["oos_perf_matrix"], dtype=np.float64)
+    assert M.shape[0] == expected_ret.shape[0]
+    assert M.shape[1] >= 2          # >=2 distinct configs were searched
+    # columns are genuinely distinct (shape-differing), not duplicates
+    assert not np.allclose(M[:, 0], M[:, 1])
+
+    # trial sharpes are the SEARCH cardinality, not folds x budget
+    assert len(res["trial_sharpes"]) == M.shape[1]
+
+
+def test_walk_forward_pbo_real_when_multiple_configs():
+    """FU1 — pbo(oos_perf_matrix) is a real [0,1] probability when C>=2."""
+    from bt.panel.stats import pbo
+
+    p = _panel(T=96, N=4)
+    res = walk_forward(
+        p,
+        strategy_factory=_long_one_asset_strategy,
+        search_space={"asset": {"values": [0, 1, 2, 3]}},
+        run_cfg=_WF_CFG,
+        scheme="rolling",
+        n_folds=3,
+        embargo_bars=1,
+        purge_bars=1,
+        budget=4,
+        periods_per_year=252.0,
+        session_aware=False,
+    )
+    M = np.asarray(res["oos_perf_matrix"], dtype=np.float64)
+    assert M.shape[1] >= 2
+    pb = pbo(M, n_splits=8)
+    assert 0.0 <= pb <= 1.0
+
+
 def test_walk_forward_freezes_params_on_test():
     """Tuned params are frozen from train and reused verbatim on test (no
     re-tuning on test data)."""

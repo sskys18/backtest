@@ -132,3 +132,33 @@ def test_calendar_policy_mix_rejected(tmp_path):
         load_panel(
             path, bar_freq="1d", session_aware=False, funding=True, calendar="trading_days"
         )
+
+
+def test_full_calendar_without_closed_rows_rejected(tmp_path):
+    """calendar='full_calendar' but all rows session==2 (no 0=closed) → raises.
+
+    A full-calendar panel must carry non-trading rows as 0=closed; an all-open
+    panel is trading-days data mislabeled and must be rejected (C9, both directions).
+    """
+    assets = ["A"]
+    ts = [1000, 2000]
+    rows = _base_rows(assets, ts)  # every row session==2
+    path = _write(pl.DataFrame(rows), tmp_path)
+    with pytest.raises(PanelSchemaError):
+        load_panel(
+            path, bar_freq="1d", session_aware=False, funding=True, calendar="full_calendar"
+        )
+
+
+def test_full_calendar_with_closed_rows_accepted(tmp_path):
+    """calendar='full_calendar' with at least one 0=closed row → loads."""
+    assets = ["A"]
+    ts = [1000, 2000, 3000]
+    rows = _base_rows(assets, ts)
+    rows[1]["session"] = 0  # a non-trading (closed) row present, as full-calendar requires
+    path = _write(pl.DataFrame(rows), tmp_path)
+    panel = load_panel(
+        path, bar_freq="1d", session_aware=False, funding=True, calendar="full_calendar"
+    )
+    assert panel.session.shape == (3, 1)
+    assert panel.session[1, 0] == 0

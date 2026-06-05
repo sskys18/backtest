@@ -251,6 +251,71 @@ def test_honest_strategy_not_flagged():
     assert flagged is False
 
 
+def _cheat_targeted_discrete(row: int):
+    """A TARGETED single-bar DISCRETE cheat: only row ``row`` reads ``close[row+1]``
+    and sets an argmax (top-1) weight. Every other row is honest (zero). This is
+    the hardest class for the perturbation detector — a single discrete flip at one
+    interior row — and the case FU4 (multi-perturbation) targets."""
+
+    def _fn(pv: PanelView) -> WeightMatrix:
+        c = pv.close
+        t, n = c.shape
+        W = np.zeros((t, n))
+        nxt = c[row + 1] / c[row] - 1.0  # peeks at close[row+1] at exactly one row
+        W[row, nxt.argmax()] = 1.0
+        return WeightMatrix(W, assets=pv.assets)
+
+    return _fn
+
+
+def test_canary_targeted_discrete_caught_multi_perturbation():
+    """FU4: a targeted single-bar discrete argmax cheat reading ``close[r+1]`` is
+    caught with high reliability across seeds under multi-perturbation.
+
+    Split-placement constraint: a row-``r`` cheat is auditable only at the split
+    ``k = r+1`` (k must include the poisoned write ``W[r]`` *and* perturb the read
+    ``close[r+1]``). For T=60, default splits are {15,30,45}, so we pick ``r=29``
+    (read ``close[30]``, audited at k=30). ``n_perturb`` does not change which
+    splits exist; it gives each auditing split multiple independent chances to flip
+    the discrete argmax, raising catch reliability from ~80% (single draw) to
+    near-certain.
+
+    Measured: 30/30 seeds caught at the default n_perturb=8 (vs 24/30 at
+    n_perturb=1). The detector is deterministic per seed, so this count is
+    reproducible. We assert a margin below the measured rate (>=27/30) to stay
+    honest about the probabilistic — not guaranteed — discrete bound.
+    """
+    panel = _panel(60, 4)
+    assert (29 + 1) in {15, 30, 45}, "test row must be split-aligned (k=r+1)"
+    cheat = _cheat_targeted_discrete(29)
+    seeds = range(30)
+    caught = sum(detect_lookahead(panel, cheat, seed=s) for s in seeds)
+    assert caught >= 27, f"targeted discrete cheat caught only {caught}/30 seeds"
+
+
+def test_targeted_discrete_single_perturbation_weaker():
+    """Control: the SAME targeted discrete cheat is caught LESS reliably with a
+    single perturbation per split — this is the documented pre-FU4 weakness the
+    multi-perturbation fix addresses. Asserts the fix strictly helps (multi >=
+    single, and single leaves a measurable gap)."""
+    panel = _panel(60, 4)
+    cheat = _cheat_targeted_discrete(29)
+    seeds = range(30)
+    single = sum(detect_lookahead(panel, cheat, n_perturb=1, seed=s) for s in seeds)
+    multi = sum(detect_lookahead(panel, cheat, n_perturb=8, seed=s) for s in seeds)
+    assert single < 30, f"single-perturbation expected to miss some seeds, got {single}/30"
+    assert multi >= single, "multi-perturbation must not catch fewer than single"
+
+
+def test_targeted_discrete_no_false_positive_multi_perturbation():
+    """The honest momentum strategy must stay un-flagged at the FU4 default
+    n_perturb=8 across many seeds — more draws must not manufacture a false
+    positive (honest weights read rows <= t, invariant under any tail scramble)."""
+    panel = _panel(60, 4)
+    fp = sum(detect_lookahead(panel, _honest_momentum, n_perturb=8, seed=s) for s in range(30))
+    assert fp == 0, f"honest strategy false-positived in {fp}/30 seeds"
+
+
 def test_shipped_primitives_not_flagged():
     """The actual P2 primitives must not trip their own causality canary."""
     from bt.panel.primitives import CrossSectionalStrategy, PairsStrategy

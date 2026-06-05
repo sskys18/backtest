@@ -18,10 +18,13 @@ bullet list — working configs (``configs/panel/*.yaml``) are the spec.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
 import yaml
+
+logger = logging.getLogger(__name__)
 
 from bt.panel.loader import load_panel
 from bt.panel.metrics import panel_metrics
@@ -86,9 +89,11 @@ def run_panel_backtest(panel_path: str | Path, config_path: str | Path) -> dict:
 
     Single-pass by default (load → strategy → run_panel → metrics). If the
     config carries a ``walk_forward`` block, additionally runs the OOS harness
-    and attaches an OOS summary (per-fold sharpe, OOS-mean metrics, DSR over the
-    per-fold sharpe trial set, PBO left ``None`` — the per-bar perf matrix CSCV
-    needs is out of P4 presentation scope).
+    and attaches an OOS summary: per-fold sharpe, OOS-mean metrics, a REAL
+    Deflated Sharpe Ratio (``dsr``, PSR on the concatenated per-bar OOS returns
+    deflated by the search-cardinality trial set), and a REAL CSCV PBO (``pbo``)
+    when ≥2 configs were searched — honest ``None`` (logged) for a single fixed
+    config.
 
     Returns:
         ``{config, assets, equity, metrics, walk_forward}`` where ``metrics`` is
@@ -105,6 +110,9 @@ def run_panel_backtest(panel_path: str | Path, config_path: str | Path) -> dict:
     bar_freq = panel_cfg.get("bar_freq", "1d")
     calendar = panel_cfg.get("calendar", "trading_days")
     periods_per_year = float(metrics_cfg.get("periods_per_year", 252.0))
+    # Time-neutral annualization base (intraday only). 8760 = 24h perp default;
+    # a KR-cash intraday dataset sets trading-hours/year (~6.5h x 252 ≈ 1638).
+    hours_per_year = float(metrics_cfg.get("hours_per_year", 8760.0))
 
     panel = load_panel(
         str(panel_path),
@@ -127,6 +135,7 @@ def run_panel_backtest(panel_path: str | Path, config_path: str | Path) -> dict:
         assets=panel.assets,
         session_aware=session_aware,
         periods_per_year=periods_per_year,
+        hours_per_year=hours_per_year,
     )
 
     report: dict = {
@@ -157,13 +166,30 @@ def _walk_forward_summary(
     walk-forward path runs a degenerate one-point tune (factory ignores tuned
     params, returns the configured strategy) — this exercises the genuine
     fold/purge/embargo + OOS-only aggregation without inventing a search space
-    the config does not define. The OOS sharpe distribution is summarized with
-    its expected-maximum-Sharpe deflation benchmark (the trial-dispersion term
-    DSR uses); a full DSR needs the candidate's per-bar OOS return series, which
-    the harness does not return, so it is left to a future phase. PBO is ``None``
-    (its CSCV per-bar perf matrix is likewise not produced by the harness).
+    the config does not define.
+
+    Anti-overfit statistics (FU1) are fed REAL per-bar OOS inputs the harness now
+    produces:
+
+      * ``dsr`` — a true Deflated Sharpe Ratio probability in [0,1], = PSR(SR0)
+        on the candidate's CONCATENATED per-bar OOS returns, with SR0 the
+        expected-max benchmark over the (de-annualized) search-cardinality trial
+        Sharpes. With the §9 fixed config (one trial) SR0 collapses to 0, so
+        ``dsr`` reduces exactly to PSR(0) — still a real probability, not a
+        renamed Sharpe.
+      * ``pbo`` — a real CSCV Probability of Backtest Overfitting when the search
+        explored ≥2 configs (``C ≥ 2``); for the §9 single-config case CSCV has
+        no cross-config ranking, so it is honest ``None`` and the reason is
+        LOGGED. No fabricated value.
+
+    The ``oos_deflation`` summary (raw best OOS Sharpe + expected-max benchmark)
+    is retained alongside as a human-readable companion to the DSR probability.
     """
-    from bt.panel.stats import expected_max_sharpe
+    from bt.panel.stats import (
+        deflated_sharpe_ratio,
+        expected_max_sharpe,
+        pbo as cscv_pbo,
+    )
     from bt.panel.walkforward import walk_forward
 
     wf_cfg = config["walk_forward"]
@@ -203,13 +229,39 @@ def _walk_forward_summary(
             "expected_max_sharpe_benchmark": float(expected_max_sharpe(oos_sharpe)),
         }
 
+    # --- REAL Deflated Sharpe Ratio (FU1) ---------------------------------
+    # PSR(SR0) on the candidate's concatenated per-bar OOS returns; SR0 derives
+    # from the (de-annualized) search-cardinality trial Sharpes. One trial ⇒
+    # SR0=0 ⇒ DSR == PSR(0).
+    oos_returns = np.asarray(wf["oos_returns"], dtype=np.float64)
+    trial_sharpes = list(wf["trial_sharpes"])
+    dsr = None
+    if oos_returns.size >= 2:
+        dsr = float(deflated_sharpe_ratio(oos_returns, trial_sharpes))
+
+    # --- REAL PBO via CSCV (FU1) ------------------------------------------
+    # Needs ≥2 configurations to rank IS-best against OOS; with the §9 fixed
+    # single config CSCV is undefined → honest None + log (no fabrication).
+    perf = np.asarray(wf["oos_perf_matrix"], dtype=np.float64)
+    n_configs = perf.shape[1] if perf.ndim == 2 else 0
+    pbo_val = None
+    if n_configs >= 2 and perf.shape[0] >= 2:
+        pbo_val = float(cscv_pbo(perf))
+    else:
+        logger.info(
+            "PBO not computed: CSCV needs >= 2 trials/configs, but only %d "
+            "configuration(s) were searched (fixed-param config) — reporting None.",
+            max(n_configs, 1),
+        )
+
     return {
         "scheme": wf_cfg.get("scheme", "rolling"),
         "n_folds": len(wf["folds"]),
         "oos_sharpe": [float(x) for x in oos_sharpe],
         "oos_metrics_mean": wf["oos_metrics_mean"],
         "oos_deflation": oos_deflation,
-        "pbo": None,
+        "dsr": dsr,
+        "pbo": pbo_val,
     }
 
 
@@ -252,6 +304,7 @@ def format_console(report: dict) -> str:
             lines.append(_row.format("Best OOS Sharpe", _fmt(wf["oos_deflation"]["best_oos_sharpe"])))
             lines.append(_row.format("Expected-max benchmark",
                                      _fmt(wf["oos_deflation"]["expected_max_sharpe_benchmark"])))
+        lines.append(_row.format("DSR (deflated Sharpe prob)", _fmt(wf.get("dsr"))))
         lines.append(_row.format("PBO", str(wf.get("pbo"))))
     lines.append("=" * 52)
     return "\n".join(lines)

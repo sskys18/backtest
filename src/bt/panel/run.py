@@ -129,7 +129,9 @@ def _perturb_tail(panel: Panel, k: int, rng: np.random.Generator) -> Panel:
     return replace(panel, **kwargs)
 
 
-def detect_lookahead(panel_or_view, strategy, *, n_splits: int = 3, seed: int = 0) -> bool:
+def detect_lookahead(
+    panel_or_view, strategy, *, n_splits: int = 3, n_perturb: int = 8, seed: int = 0
+) -> bool:
     """Future-perturbation dependency detector for look-ahead (C4, mechanism 2).
 
     The trailing-only helper guard cannot see *raw* forward indexing
@@ -137,10 +139,11 @@ def detect_lookahead(panel_or_view, strategy, *, n_splits: int = 3, seed: int = 
     This detector catches such cheats by testing the **defining property** of
     look-ahead directly: does ``W[:k]`` depend on panel rows ``>= k``?
 
-    For each split ``k``, scramble rows ``>= k`` of every non-calendar field —
-    price/flow/fx PLUS the survivorship dimensions ``active_mask``/``sector``
-    (so an ``active_mask[t+1]`` survivorship-foreknowledge cheat is caught too) —
-    and recompute ``W``:
+    For each split ``k``, draw ``n_perturb`` **independent** tail scrambles of
+    rows ``>= k`` over every non-calendar field — price/flow/fx PLUS the
+    survivorship dimensions ``active_mask``/``sector`` (so an ``active_mask[t+1]``
+    survivorship-foreknowledge cheat is caught too) — recompute ``W`` for each,
+    and flag if **any** draw changes ``W[:k]``:
 
     - **Honest** strategy: ``W[t] = f(rows <= t)`` → ``W[:k]`` is bit-identical
       under any tail scramble → not flagged.
@@ -167,18 +170,38 @@ def detect_lookahead(panel_or_view, strategy, *, n_splits: int = 3, seed: int = 
 
     Coverage is **cheat-class-dependent, and denser splits do NOT fix the
     discrete case** (corrected — the earlier claim that ``k = 1..T-1`` catches
-    every targeted cheat except ``ti = T-1`` was false). Single-perturbation-
-    per-split applies exactly one multiplicative draw to the read row at the one
-    split ``k = r``; that only *probabilistically* flips a **discrete** output
-    (argmax / top-k / threshold), so coverage of targeted discrete cheats is
-    seed-dependent and incomplete **at any split density** — empirically dense
-    splits still miss ~10-17 genuine interior discrete leaks per random panel.
-    A **continuous**-dependency cheat (``W ∝ close[t+1]/close[t]``) IS caught at
-    ``k = r`` under dense splits — any nonzero dependence trips ``np.allclose``.
+    every targeted cheat except ``ti = T-1`` was false). A targeted single-bar
+    cheat reading row ``r`` is only auditable at the **one** split ``k`` with
+    ``ti < k <= r`` (integer reads ``close[r+1]`` force ``k = r+1``): no other
+    split both includes the poisoned write ``W[ti]`` *and* perturbs the read row.
+    Whether that split exists is purely a function of split placement; ``n_perturb``
+    does **not** change which splits are tested.
+
+    What ``n_perturb`` DOES fix (FU4). At the auditing split, a **discrete**
+    output (argmax / top-k / threshold) only flips *probabilistically* under a
+    random tail scramble. With a single draw (the old behavior) that flip is
+    seed-dependent and frequently missed — empirically ~10-17 genuine interior
+    discrete leaks slip through per random panel. This detector now applies
+    ``n_perturb`` (default 8) **independent** draws per split and flags if any one
+    of them changes ``W[:k]``. Each draw is an independent chance to flip a
+    discrete selection, so the per-split miss probability falls geometrically
+    (≈ ``(1 - p_flip) ** n_perturb``): discrete coverage at the auditing split goes
+    from probabilistic-and-weak to near-certain in practice. It is still
+    **probabilistic, not a proof** — a pathological strategy whose discrete output
+    never flips under any of the draws could in principle slip — and it does
+    **not** widen which rows are audited (that is split placement, unchanged).
+    A **continuous**-dependency cheat (``W ∝ close[t+1]/close[t]``) is caught by a
+    single draw — any nonzero dependence trips ``np.allclose`` — so multiple draws
+    cost nothing there.
+
+    Determinism. Each ``(split k, draw d)`` seeds its own
+    ``np.random.default_rng([seed, k, d])``, so the whole sweep is reproducible
+    per call (same ``seed`` → same verdict); there is no global-RNG state and no
+    ordering dependence between splits.
+
     This matters because the shipped primitives' selection step (CS top-k/bottom-k,
-    Pairs z-threshold) is **discrete** — exactly the class this detector is
-    weakest against. Only multiple perturbations per split would improve discrete
-    coverage (still probabilistic). It is **not** a full causality proof; it is a
+    Pairs z-threshold) is **discrete** — exactly the class this detector was
+    weakest against before FU4. It is **not** a full causality proof; it is a
     defense-in-depth canary. P3's OOS/bias layer must not treat a pass here as
     proof of causality for arbitrary targeted cheats.
 
@@ -189,12 +212,17 @@ def detect_lookahead(panel_or_view, strategy, *, n_splits: int = 3, seed: int = 
 
     W_real = np.nan_to_num(np.asarray(fn(PanelView(panel)).W, dtype=np.float64))
     T = panel.close.shape[0]
-    rng = np.random.default_rng(seed)
 
     splits = sorted({max(1, T * i // (n_splits + 1)) for i in range(1, n_splits + 1)})
     for k in splits:
-        pert = _perturb_tail(panel, k, rng)
-        W_p = np.nan_to_num(np.asarray(fn(PanelView(pert)).W, dtype=np.float64))
-        if not np.allclose(W_real[:k], W_p[:k], atol=1e-9):
-            return True
+        for d in range(n_perturb):
+            # Independent, reproducible draw per (split, draw): seeded by
+            # [seed, k, d] so the whole sweep is deterministic per call. Each
+            # draw is an independent chance to flip a discrete (argmax/top-k)
+            # selection that reads the perturbed tail.
+            rng = np.random.default_rng([seed, k, d])
+            pert = _perturb_tail(panel, k, rng)
+            W_p = np.nan_to_num(np.asarray(fn(PanelView(pert)).W, dtype=np.float64))
+            if not np.allclose(W_real[:k], W_p[:k], atol=1e-9):
+                return True
     return False
