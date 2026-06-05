@@ -1,5 +1,21 @@
 # Session Handoff
-> Generated: 2026-06-05 (KST) — multi-asset quant engine P0–P4 BUILT via ultracode workflows, all committed on feat branch, NOT pushed
+> Generated: 2026-06-05 (KST) — engine P0–P4 merged to main (#1); docs aligned + 4 follow-ups (DSR/PBO wiring, hours_per_year, full_calendar, C4 hardening) done on feat/panel-followups
+
+## Latest (panel follow-ups session)
+- **P0–P4 merged to main** as squash `5e49b28` (PR #1). Working engine: `bt backtest-panel`.
+- **Docs aligned**: CLAUDE.md + docs/architecture.md now describe the panel quant engine (3rd mode).
+- **4 follow-ups done** on `feat/panel-followups` (each 3-lens/independently verified):
+  - FU1 DSR/PBO wired end-to-end into the report (real Deflated-Sharpe probability + real CSCV PBO when C≥2, honest None when C<2; oos_returns per-fold concat, not equity-stitched).
+  - FU2 `hours_per_year` config-driven (8760 perp / ~1638 KR-cash intraday).
+  - FU3 loader `full_calendar` reject branch (C9 both directions).
+  - FU4 `detect_lookahead` multi-perturbation (n=8): targeted-discrete catch ~80%→~100% at the auditing split; non-split-aligned cheats still slip (documented bound).
+  - Gate: cargo **61**, pytest **160**. Additive; forbidden paths untouched.
+- **GIT AUTH GOTCHA (important):** plain `git fetch`/`pull`/`push` over https resolve the WRONG GitHub account (`yuseongkim-inbl`) → "Repository not found". The repo is private to `sskys18`. Use the sskys18 token explicitly:
+  `tok=$(gh auth token -u sskys18); git fetch "https://x-access-token:${tok}@github.com/sskys18/backtest.git" main`. `gh` write-pattern commands with `-R sskys18/backtest` are routed correctly by the identity hook; read-only `gh` (repo view / pr view) are NOT and fail — judge by the routed commands.
+- **Workflow `args` bug:** the phase-runner `args` channel did NOT propagate to the script (every phase saw `phase=UNKNOWN`, empty focus). P0–P4 succeeded only because agents inferred the phase from the plan doc + git; FU work was done via DIRECT agents instead. If reusing `.claude/workflows/phase-runner.mjs`, pass scope through the plan doc or fix args propagation.
+
+---
+
 
 ## Task
 **General multi-asset quant backtest engine** — built per spec
@@ -42,24 +58,18 @@ causality-leak / spec-conformance) → fix-loop → independent re-gate → comm
 - **P4** `cli.py` `backtest-panel` subcommand + `report.py` (orchestration + console).
 
 ## Resume Here
-1. **Decide push/PR/merge.** Nothing pushed. Options: `/ship` (stage→commit→push→PR→merge,
-   one confirm before push), or manual `git push -u origin feat/multi-asset-quant-engine`
-   then `gh pr create`. Repo convention = no push without explicit ask.
-2. **Follow-up gaps (NOT blockers — flagged honestly by the verifier panels):**
-   - **DSR/PBO not wired end-to-end in the P4 report.** `stats.py` `dsr()`/`pbo()` exist
-     and are unit-tested (P3), but the presentation harness doesn't yet return the
-     per-bar OOS return series + per-trial sharpes they need. Report carries
-     `oos_deflation {best_oos_sharpe, expected_max_sharpe_benchmark}` + `pbo=None`
-     rather than a fake probability. Wiring this is the top follow-up.
-   - **`hours_per_year` defaults 8760** (24h perp); KR-cash intraday time-neutral
-     Sharpe (~6.5h/day) path not exercised — set per-dataset when a cash intraday
-     panel is run.
-   - **Loader `full_calendar` reject branch unvalidated** (default `trading_days` is
-     enforced; the alt branch has no test — fail-to-reject, low risk).
-   - **C4 detect_lookahead is a defense-in-depth canary, not a sandbox** — catches
-     pervasive + continuous cheats; targeted *discrete* (argmax/top-k) lookahead is
-     only probabilistically caught (documented in run.py). Approach A's vectorized
-     compute precludes a hard per-t sandbox.
+- **All four P0–P4 follow-ups are DONE** (feat/panel-followups, see "Latest" above) — the
+  list below is the original P0–P4 gap log, now RESOLVED, kept for provenance:
+  - ~~DSR/PBO not wired end-to-end~~ → **FU1 done**: report emits real Deflated-Sharpe
+    probability + real CSCV PBO (honest None when C<2); threaded through walk-forward too.
+  - ~~`hours_per_year` defaults 8760~~ → **FU2 done**: config-driven (single-pass + walk-forward).
+  - ~~Loader `full_calendar` branch unvalidated~~ → **FU3 done**: rejects mislabeled/typo'd/
+    no-session-column calendars (both directions).
+  - ~~C4 only probabilistic for discrete~~ → **FU4 done**: multi-perturbation lifts catch to
+    ~100% at the auditing split. Remaining honest bound: non-split-aligned discrete cheats
+    can still slip (split placement unchanged) — documented in run.py, defense-in-depth canary.
+- **Next:** `/ship feat/panel-followups → main` (push via the sskys18 token, see gotcha above).
+  Nothing else pending.
 
 ## Decisions (locked, do NOT revisit)
 - General quant backtester, KR-perp = first reference strategy. Dual-horizon.

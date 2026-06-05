@@ -13,6 +13,7 @@ module owns only the split mechanics and the OOS aggregation, never the search.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -139,7 +140,7 @@ def _slice_panel(panel: Panel, idx: np.ndarray) -> Panel:
 
 
 def _score_segment(
-    panel: Panel, strategy_fn, run_cfg, *, periods_per_year, session_aware
+    panel: Panel, strategy_fn, run_cfg, *, periods_per_year, hours_per_year=8760.0, session_aware
 ) -> dict:
     """Run a strategy over a (sub)panel and compute its metrics."""
     pv = PanelView(panel)
@@ -153,7 +154,22 @@ def _score_segment(
         assets=panel.assets,
         session_aware=session_aware,
         periods_per_year=periods_per_year,
+        hours_per_year=hours_per_year,
     )
+
+
+def _segment_returns(panel: Panel, strategy_fn, run_cfg) -> np.ndarray:
+    """Per-bar simple returns ``r = Δequity / equity_{t-1}`` for a strategy over a
+    (sub)panel. Returns are computed WITHIN the segment (the equity curve starts
+    fresh at ``initial_collateral``), so concatenating across folds never injects
+    a spurious fold-boundary return (each fold's curve is a separate run)."""
+    pv = PanelView(panel)
+    wm = strategy_fn(pv)
+    res = _run_weights(panel, wm.W, run_cfg)
+    eq = np.asarray(res["equity"], dtype=np.float64)
+    if eq.size < 2:
+        return np.empty(0, dtype=np.float64)
+    return np.diff(eq) / eq[:-1]
 
 
 def walk_forward(
@@ -168,6 +184,7 @@ def walk_forward(
     purge_bars: int = 0,
     budget: int = 10,
     periods_per_year: float = 252.0,
+    hours_per_year: float = 8760.0,
     session_aware: bool = False,
     objective_metric: str = "sharpe",
     seed: int = 42,
@@ -195,15 +212,20 @@ def walk_forward(
     opt = BayesianOptimizer(seed=seed)
 
     fold_results = []
+    candidate_oos_returns: list[np.ndarray] = []  # per-fold frozen-candidate returns
+    test_panels: list[Panel] = []                  # for the per-config OOS perf matrix
+    histories: list[dict] = []                     # tuning trials across ALL folds (deduped later)
     for f in folds:
         train_panel = _slice_panel(panel, f.train_idx)
         test_panel = _slice_panel(panel, f.test_idx)
+        test_panels.append(test_panel)
 
         def objective(params: dict, _tp=train_panel) -> float:
             fn = strategy_factory(params)
             try:
                 m = _score_segment(_tp, fn, run_cfg,
                                    periods_per_year=periods_per_year,
+                                   hours_per_year=hours_per_year,
                                    session_aware=session_aware)
             except Exception:
                 return -1e18
@@ -212,12 +234,17 @@ def walk_forward(
 
         tuned = opt.optimize(objective, search_space, budget)
         best_params = tuned["best_config"]
+        histories.extend(tuned.get("history", []))
 
         # FREEZE best params; evaluate on the OOS test segment.
         frozen_fn = strategy_factory(best_params)
         oos = _score_segment(test_panel, frozen_fn, run_cfg,
                             periods_per_year=periods_per_year,
+                            hours_per_year=hours_per_year,
                             session_aware=session_aware)
+        candidate_oos_returns.append(
+            _segment_returns(test_panel, frozen_fn, run_cfg)
+        )
 
         fold_results.append({
             "index": f.index,
@@ -233,8 +260,52 @@ def walk_forward(
         for k in keys
         if isinstance(fold_results[0]["oos_metrics"][k], (int, float))
     }
+
+    # --- DSR/PBO inputs (FU1) -------------------------------------------------
+    # (a) candidate's CONCATENATED per-bar OOS returns (per-fold returns joined,
+    #     NOT equity curves — each fold runs fresh from initial_collateral).
+    oos_returns = (
+        np.concatenate(candidate_oos_returns)
+        if candidate_oos_returns else np.empty(0, dtype=np.float64)
+    )
+
+    # (b) the multiple-testing trial set = the SEARCH cardinality across ALL folds,
+    #     DEDUPED by config. Union the per-fold tuning histories (so configs a later
+    #     fold explores but the first did not are counted), then collapse identical
+    #     configs to one entry — this captures the true number of distinct strategies
+    #     tested without the phantom dispersion that raw folds x budget (repeated
+    #     identical configs) would inject. De-annualize the train Sharpes so SR0
+    #     matches the per-bar candidate Sharpe PSR/DSR consumes.
+    sqrt_ppy = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
+    distinct: dict[tuple, float] = {}
+    for entry in histories:
+        if entry.get("score") is None:
+            continue
+        key = tuple(sorted(entry["config"].items()))
+        # keep the best (max) train score seen for a config
+        s = float(entry["score"]) / sqrt_ppy
+        if key not in distinct or s > distinct[key]:
+            distinct[key] = s
+    distinct_configs = [dict(k) for k in distinct]
+    trial_sharpes = [distinct[k] for k in distinct]
+
+    # (c) per-trial x per-bar OOS performance matrix for CSCV/PBO: one column per
+    #     distinct config, re-run frozen across ALL test folds and concatenated
+    #     (same fold order as the candidate so rows align).
+    oos_perf_matrix = np.empty((oos_returns.size, 0), dtype=np.float64)
+    if distinct_configs and oos_returns.size:
+        cols = []
+        for cfg_params in distinct_configs:
+            fn = strategy_factory(cfg_params)
+            per_fold = [_segment_returns(tp, fn, run_cfg) for tp in test_panels]
+            cols.append(np.concatenate(per_fold))
+        oos_perf_matrix = np.column_stack(cols)
+
     return {
         "folds": fold_results,
         "oos_sharpe": oos_sharpe,
         "oos_metrics_mean": oos_mean,
+        "oos_returns": oos_returns,
+        "trial_sharpes": trial_sharpes,
+        "oos_perf_matrix": oos_perf_matrix,
     }

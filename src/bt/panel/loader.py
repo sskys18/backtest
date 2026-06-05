@@ -99,16 +99,37 @@ def load_panel(
                 f"column for numeraire={numeraire!r}"
             )
 
-    # Calendar policy (C9): trading-days-only panels must be entirely session==2.
-    # Only enforced on the daily / trading_days path; intraday panels legitimately
-    # carry sessions {1,3,4,5}.
-    if calendar == "trading_days" and "session" in cols and not session_aware:
+    # Calendar policy (C9): reject calendar/data mismatch in BOTH directions.
+    # Only enforced on the daily path (session_aware=False); intraday panels
+    # legitimately carry sessions {1,3,4,5}.
+    if calendar not in {"trading_days", "full_calendar"}:
+        raise PanelSchemaError(
+            f"unknown calendar policy {calendar!r}; "
+            f"expected 'trading_days' or 'full_calendar'"
+        )
+    if calendar == "full_calendar" and not session_aware and "session" not in cols:
+        # full_calendar promises 0=closed non-trading rows; without a session
+        # column that promise is unverifiable — reject rather than pass silently.
+        raise PanelSchemaError(
+            "full_calendar calendar requires a 'session' column with ≥1 row session==0 (closed)"
+        )
+    if "session" in cols and not session_aware:
         distinct = set(df.select(pl.col("session").unique()).to_series().to_list())
-        if distinct - {2}:
-            raise PanelSchemaError(
-                f"trading_days calendar requires every row session==2; "
-                f"found sessions {sorted(distinct)} (mixed calendar policy)"
-            )
+        if calendar == "trading_days":
+            # trading-days-only panels must be entirely session==2.
+            if distinct - {2}:
+                raise PanelSchemaError(
+                    f"trading_days calendar requires every row session==2; "
+                    f"found sessions {sorted(distinct)} (mixed calendar policy)"
+                )
+        elif calendar == "full_calendar":
+            # full-calendar panels must include non-trading rows as 0=closed;
+            # an all-open panel is trading-days data mislabeled.
+            if 0 not in distinct:
+                raise PanelSchemaError(
+                    f"full_calendar calendar requires ≥1 row session==0 (closed); "
+                    f"found sessions {sorted(distinct)} (trading-days data mislabeled)"
+                )
 
     # Canonical order: sorted unique timestamps (rows), sorted unique assets (cols).
     timestamps = sorted(df.select(pl.col("timestamp").unique()).to_series().to_list())
