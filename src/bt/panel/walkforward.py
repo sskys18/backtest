@@ -214,7 +214,7 @@ def walk_forward(
     fold_results = []
     candidate_oos_returns: list[np.ndarray] = []  # per-fold frozen-candidate returns
     test_panels: list[Panel] = []                  # for the per-config OOS perf matrix
-    first_history: list[dict] = []                 # one fold's tuning trial set
+    histories: list[dict] = []                     # tuning trials across ALL folds (deduped later)
     for f in folds:
         train_panel = _slice_panel(panel, f.train_idx)
         test_panel = _slice_panel(panel, f.test_idx)
@@ -234,8 +234,7 @@ def walk_forward(
 
         tuned = opt.optimize(objective, search_space, budget)
         best_params = tuned["best_config"]
-        if not first_history:
-            first_history = tuned.get("history", [])
+        histories.extend(tuned.get("history", []))
 
         # FREEZE best params; evaluate on the OOS test segment.
         frozen_fn = strategy_factory(best_params)
@@ -270,14 +269,16 @@ def walk_forward(
         if candidate_oos_returns else np.empty(0, dtype=np.float64)
     )
 
-    # (b) the multiple-testing trial set = the SEARCH cardinality (distinct
-    #     configs explored), NOT folds x budget — pooling identical configs across
-    #     folds would fabricate dispersion and a phantom overfit penalty. De-
-    #     annualize the train Sharpes so SR0 matches the per-bar candidate Sharpe
-    #     PSR/DSR consumes.
+    # (b) the multiple-testing trial set = the SEARCH cardinality across ALL folds,
+    #     DEDUPED by config. Union the per-fold tuning histories (so configs a later
+    #     fold explores but the first did not are counted), then collapse identical
+    #     configs to one entry — this captures the true number of distinct strategies
+    #     tested without the phantom dispersion that raw folds x budget (repeated
+    #     identical configs) would inject. De-annualize the train Sharpes so SR0
+    #     matches the per-bar candidate Sharpe PSR/DSR consumes.
     sqrt_ppy = math.sqrt(periods_per_year) if periods_per_year > 0 else 1.0
     distinct: dict[tuple, float] = {}
-    for entry in first_history:
+    for entry in histories:
         if entry.get("score") is None:
             continue
         key = tuple(sorted(entry["config"].items()))

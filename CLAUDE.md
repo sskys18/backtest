@@ -80,7 +80,7 @@ Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit p
 - `src/bt/data/` — Import-only data layer (import_, store, validate, schemas). No fetching — siblings own that.
 - `src/bt/rl/` — PPO reinforcement learning (env, train, policy_strategy)
 - `configs/` — YAML strategy configs (incl. `configs/panel/` reference panel configs)
-- `tests/python/` — Python tests (151 tests)
+- `tests/python/` — Python tests (163 tests)
 - `experiments/` — goals.md + replay results + run artifacts
 - `data/raw/` — Parquet data store (gitignored)
 
