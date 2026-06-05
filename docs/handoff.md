@@ -58,24 +58,18 @@ causality-leak / spec-conformance) → fix-loop → independent re-gate → comm
 - **P4** `cli.py` `backtest-panel` subcommand + `report.py` (orchestration + console).
 
 ## Resume Here
-1. **Decide push/PR/merge.** Nothing pushed. Options: `/ship` (stage→commit→push→PR→merge,
-   one confirm before push), or manual `git push -u origin feat/multi-asset-quant-engine`
-   then `gh pr create`. Repo convention = no push without explicit ask.
-2. **Follow-up gaps (NOT blockers — flagged honestly by the verifier panels):**
-   - **DSR/PBO not wired end-to-end in the P4 report.** `stats.py` `dsr()`/`pbo()` exist
-     and are unit-tested (P3), but the presentation harness doesn't yet return the
-     per-bar OOS return series + per-trial sharpes they need. Report carries
-     `oos_deflation {best_oos_sharpe, expected_max_sharpe_benchmark}` + `pbo=None`
-     rather than a fake probability. Wiring this is the top follow-up.
-   - **`hours_per_year` defaults 8760** (24h perp); KR-cash intraday time-neutral
-     Sharpe (~6.5h/day) path not exercised — set per-dataset when a cash intraday
-     panel is run.
-   - **Loader `full_calendar` reject branch unvalidated** (default `trading_days` is
-     enforced; the alt branch has no test — fail-to-reject, low risk).
-   - **C4 detect_lookahead is a defense-in-depth canary, not a sandbox** — catches
-     pervasive + continuous cheats; targeted *discrete* (argmax/top-k) lookahead is
-     only probabilistically caught (documented in run.py). Approach A's vectorized
-     compute precludes a hard per-t sandbox.
+- **All four P0–P4 follow-ups are DONE** (feat/panel-followups, see "Latest" above) — the
+  list below is the original P0–P4 gap log, now RESOLVED, kept for provenance:
+  - ~~DSR/PBO not wired end-to-end~~ → **FU1 done**: report emits real Deflated-Sharpe
+    probability + real CSCV PBO (honest None when C<2); threaded through walk-forward too.
+  - ~~`hours_per_year` defaults 8760~~ → **FU2 done**: config-driven (single-pass + walk-forward).
+  - ~~Loader `full_calendar` branch unvalidated~~ → **FU3 done**: rejects mislabeled/typo'd/
+    no-session-column calendars (both directions).
+  - ~~C4 only probabilistic for discrete~~ → **FU4 done**: multi-perturbation lifts catch to
+    ~100% at the auditing split. Remaining honest bound: non-split-aligned discrete cheats
+    can still slip (split placement unchanged) — documented in run.py, defense-in-depth canary.
+- **Next:** `/ship feat/panel-followups → main` (push via the sskys18 token, see gotcha above).
+  Nothing else pending.
 
 ## Decisions (locked, do NOT revisit)
 - General quant backtester, KR-perp = first reference strategy. Dual-horizon.

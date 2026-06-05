@@ -162,3 +162,26 @@ def test_full_calendar_with_closed_rows_accepted(tmp_path):
     )
     assert panel.session.shape == (3, 1)
     assert panel.session[1, 0] == 0
+
+
+def test_unknown_calendar_policy_rejected(tmp_path):
+    """Codex round-1 — calendar is an enum; a typo must NOT silently bypass C9."""
+    rows = _base_rows(["A"], [1000, 2000])
+    path = _write(pl.DataFrame(rows), tmp_path)
+    with pytest.raises(PanelSchemaError, match="unknown calendar policy"):
+        load_panel(
+            path, bar_freq="1d", session_aware=False, funding=True, calendar="full_calender"
+        )
+
+
+def test_full_calendar_without_session_column_rejected(tmp_path):
+    """Codex round-1 — full_calendar without a session column can't prove 0=closed
+    rows exist; must reject rather than pass silently."""
+    rows = _base_rows(["A"], [1000, 2000])
+    for r in rows:
+        r.pop("session", None)
+    path = _write(pl.DataFrame(rows), tmp_path)
+    with pytest.raises(PanelSchemaError, match="full_calendar calendar requires a 'session'"):
+        load_panel(
+            path, bar_freq="1d", session_aware=False, funding=True, calendar="full_calendar"
+        )

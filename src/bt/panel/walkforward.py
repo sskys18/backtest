@@ -140,7 +140,7 @@ def _slice_panel(panel: Panel, idx: np.ndarray) -> Panel:
 
 
 def _score_segment(
-    panel: Panel, strategy_fn, run_cfg, *, periods_per_year, session_aware
+    panel: Panel, strategy_fn, run_cfg, *, periods_per_year, hours_per_year=8760.0, session_aware
 ) -> dict:
     """Run a strategy over a (sub)panel and compute its metrics."""
     pv = PanelView(panel)
@@ -154,6 +154,7 @@ def _score_segment(
         assets=panel.assets,
         session_aware=session_aware,
         periods_per_year=periods_per_year,
+        hours_per_year=hours_per_year,
     )
 
 
@@ -183,6 +184,7 @@ def walk_forward(
     purge_bars: int = 0,
     budget: int = 10,
     periods_per_year: float = 252.0,
+    hours_per_year: float = 8760.0,
     session_aware: bool = False,
     objective_metric: str = "sharpe",
     seed: int = 42,
@@ -223,6 +225,7 @@ def walk_forward(
             try:
                 m = _score_segment(_tp, fn, run_cfg,
                                    periods_per_year=periods_per_year,
+                                   hours_per_year=hours_per_year,
                                    session_aware=session_aware)
             except Exception:
                 return -1e18
@@ -238,6 +241,7 @@ def walk_forward(
         frozen_fn = strategy_factory(best_params)
         oos = _score_segment(test_panel, frozen_fn, run_cfg,
                             periods_per_year=periods_per_year,
+                            hours_per_year=hours_per_year,
                             session_aware=session_aware)
         candidate_oos_returns.append(
             _segment_returns(test_panel, frozen_fn, run_cfg)

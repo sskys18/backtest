@@ -151,6 +151,7 @@ def run_panel_backtest(panel_path: str | Path, config_path: str | Path) -> dict:
         report["walk_forward"] = _walk_forward_summary(
             panel, config, run_cfg,
             periods_per_year=periods_per_year,
+            hours_per_year=hours_per_year,
             session_aware=session_aware,
         )
 
@@ -158,7 +159,7 @@ def run_panel_backtest(panel_path: str | Path, config_path: str | Path) -> dict:
 
 
 def _walk_forward_summary(
-    panel, config, run_cfg, *, periods_per_year, session_aware
+    panel, config, run_cfg, *, periods_per_year, hours_per_year, session_aware
 ) -> dict:
     """Run the P3 OOS harness on a fixed-param strategy and summarize OOS-only.
 
@@ -212,6 +213,7 @@ def _walk_forward_summary(
         purge_bars=int(wf_cfg.get("purge", 0)),
         budget=int(wf_cfg.get("budget", 1)),
         periods_per_year=periods_per_year,
+        hours_per_year=hours_per_year,
         session_aware=session_aware,
     )
 

@@ -252,6 +252,33 @@ def test_panel_backtest_hours_per_year_config_driven(tmp_path):
     assert tn_kr / tn_perp == pytest.approx(math.sqrt(1638.0 / 8760.0), rel=1e-9)
 
 
+def test_panel_backtest_walk_forward_hours_per_year_config_driven(tmp_path):
+    """FU2 (Codex round-1) — the WALK-FORWARD OOS time-neutral metrics must also
+    use config hours_per_year, not the hardcoded 8760 (the single-pass path alone
+    is not enough; _walk_forward_summary -> walk_forward -> _score_segment must
+    thread it through)."""
+    panel_path = _write_intraday_panel(tmp_path)
+
+    cfg_kr_data = _intraday_cfg(1638.0)
+    cfg_perp_data = _intraday_cfg(8760.0)
+    for cfg in (cfg_kr_data, cfg_perp_data):
+        cfg["walk_forward"] = {"scheme": "rolling", "folds": 3, "embargo": 1,
+                               "purge": 1, "budget": 1}
+
+    cfg_kr = tmp_path / "cfg_kr_wf.yaml"
+    cfg_kr.write_text(yaml.safe_dump(cfg_kr_data))
+    cfg_perp = tmp_path / "cfg_perp_wf.yaml"
+    cfg_perp.write_text(yaml.safe_dump(cfg_perp_data))
+
+    rep_kr = run_panel_backtest(panel_path, str(cfg_kr))
+    rep_perp = run_panel_backtest(panel_path, str(cfg_perp))
+
+    tn_kr = rep_kr["walk_forward"]["oos_metrics_mean"]["time_neutral_sharpe"]
+    tn_perp = rep_perp["walk_forward"]["oos_metrics_mean"]["time_neutral_sharpe"]
+    assert abs(tn_kr) > 1e-9 and abs(tn_perp) > 1e-9
+    assert tn_kr / tn_perp == pytest.approx(math.sqrt(1638.0 / 8760.0), rel=1e-9)
+
+
 def test_panel_backtest_emits_real_dsr_and_honest_pbo(tmp_path, caplog):
     """FU1 — report.dsr is a real Deflated-Sharpe probability; pbo honest-None.
 
