@@ -1,5 +1,21 @@
 # Session Handoff
-> Generated: 2026-06-05 (KST) — multi-asset quant engine P0–P4 BUILT via ultracode workflows, all committed on feat branch, NOT pushed
+> Generated: 2026-06-05 (KST) — engine P0–P4 merged to main (#1); docs aligned + 4 follow-ups (DSR/PBO wiring, hours_per_year, full_calendar, C4 hardening) done on feat/panel-followups
+
+## Latest (panel follow-ups session)
+- **P0–P4 merged to main** as squash `5e49b28` (PR #1). Working engine: `bt backtest-panel`.
+- **Docs aligned**: CLAUDE.md + docs/architecture.md now describe the panel quant engine (3rd mode).
+- **4 follow-ups done** on `feat/panel-followups` (each 3-lens/independently verified):
+  - FU1 DSR/PBO wired end-to-end into the report (real Deflated-Sharpe probability + real CSCV PBO when C≥2, honest None when C<2; oos_returns per-fold concat, not equity-stitched).
+  - FU2 `hours_per_year` config-driven (8760 perp / ~1638 KR-cash intraday).
+  - FU3 loader `full_calendar` reject branch (C9 both directions).
+  - FU4 `detect_lookahead` multi-perturbation (n=8): targeted-discrete catch ~80%→~100% at the auditing split; non-split-aligned cheats still slip (documented bound).
+  - Gate: cargo **61**, pytest **160**. Additive; forbidden paths untouched.
+- **GIT AUTH GOTCHA (important):** plain `git fetch`/`pull`/`push` over https resolve the WRONG GitHub account (`yuseongkim-inbl`) → "Repository not found". The repo is private to `sskys18`. Use the sskys18 token explicitly:
+  `tok=$(gh auth token -u sskys18); git fetch "https://x-access-token:${tok}@github.com/sskys18/backtest.git" main`. `gh` write-pattern commands with `-R sskys18/backtest` are routed correctly by the identity hook; read-only `gh` (repo view / pr view) are NOT and fail — judge by the routed commands.
+- **Workflow `args` bug:** the phase-runner `args` channel did NOT propagate to the script (every phase saw `phase=UNKNOWN`, empty focus). P0–P4 succeeded only because agents inferred the phase from the plan doc + git; FU work was done via DIRECT agents instead. If reusing `.claude/workflows/phase-runner.mjs`, pass scope through the plan doc or fix args propagation.
+
+---
+
 
 ## Task
 **General multi-asset quant backtest engine** — built per spec
