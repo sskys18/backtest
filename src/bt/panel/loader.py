@@ -154,7 +154,6 @@ def load_panel(
     for r in records:
         i = t_index[r["timestamp"]]
         j = a_index[r["asset"]]
-        active[i, j] = True
         for name in _OHLCV:
             out[name][i, j] = r[name]
         if has_funding_col:
@@ -165,6 +164,13 @@ def load_panel(
             session_arr[i, j] = r["session"] if r["session"] is not None else 0
         else:
             session_arr[i, j] = 2
+        # C9 enforcement at execution, not just validation: on the daily path
+        # (session_aware=False) the Rust engine never force-flats, so a
+        # session==0 (closed) row must be INACTIVE — nonzero weight there
+        # hard-fails in the engine instead of silently trading a closed day.
+        # Intraday (session_aware=True) keeps closed rows active; the engine's
+        # session force-flat (0/4/5) owns that path.
+        active[i, j] = session_aware or session_arr[i, j] != 0
         if has_sector:
             sector_arr[i, j] = r["sector"]
 

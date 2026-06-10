@@ -106,6 +106,7 @@ def main() -> None:
     start_ms = now_ms - 30 * 24 * 3600 * 1000
     print(f"universe top-{TOP_N} alts + BTC | 5m 30d from {start_ms}", flush=True)
 
+    OUT.mkdir(parents=True, exist_ok=True)
     frames = []
     for i, sym in enumerate([btc] + alts, 1):
         try:
@@ -139,7 +140,6 @@ def main() -> None:
         pl.lit(2, dtype=pl.UInt8).alias("session"),
         pl.lit("crypto").alias("sector"),
     )
-    OUT.mkdir(parents=True, exist_ok=True)
     panel.write_parquet(OUT / f"binance_micro_panel_{INTERVAL}.parquet")
     print(f"wrote micro panel rows={panel.height} assets={panel['asset'].n_unique()}", flush=True)
 
