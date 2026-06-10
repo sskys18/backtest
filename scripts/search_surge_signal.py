@@ -23,6 +23,7 @@ import numpy as np
 import polars as pl
 
 from bt.panel.loader import load_panel
+from bt.panel.run import _run_weights
 from bt.panel.strategy import PanelView, WeightMatrix
 from bt.panel.walkforward import make_folds, walk_forward
 
