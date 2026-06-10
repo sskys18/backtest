@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -251,7 +252,7 @@ def carry_test(df: pl.DataFrame) -> None:
             continue
         years = {}
         for d, v in zip(fd["day"].to_numpy(), x):
-            y = 1970 + int(d // 365.25)
+            y = (date(1970, 1, 1) + timedelta(days=int(d))).year
             years.setdefault(y, []).append(v)
         ystr = " ".join(
             f"{y}:{np.mean(v)*PPY:+.0%}" for y, v in sorted(years.items()) if len(v) > 60

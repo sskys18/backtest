@@ -461,6 +461,7 @@ pub fn run_panel_core(
                 &mut bar_turnover,
                 &mut res.trades,
                 open,
+                active_mask,
                 &fxv,
                 cfg,
                 ti,
@@ -652,6 +653,7 @@ pub fn run_panel_core(
                 &mut bar_turnover,
                 &mut res.trades,
                 close,
+                active_mask,
                 &fxv,
                 cfg,
                 ti,
@@ -682,6 +684,7 @@ fn drain_fills<F: Fn(usize, usize) -> f64>(
     bar_turnover: &mut f64,
     trades: &mut Vec<TradeRec>,
     price: &[f64],
+    active_mask: &[bool],
     fxv: &F,
     cfg: &PortfolioConfig,
     ti: usize,
@@ -691,7 +694,10 @@ fn drain_fills<F: Fn(usize, usize) -> f64>(
     let pend_now: Vec<(usize, PendingOrder)> = pending.iter().map(|(a, o)| (*a, *o)).collect();
     for (a, ord) in pend_now {
         let raw_px = price[ti * n + a];
-        if raw_px.is_nan() {
+        // NaN price OR inactive cell (closed full_calendar row): the venue is
+        // shut — the order stays pending and fills at the next active bar's
+        // price, exactly like a real exchange queue across a closure.
+        if raw_px.is_nan() || !active_mask[ti * n + a] {
             continue;
         }
         let cur = positions[a];
