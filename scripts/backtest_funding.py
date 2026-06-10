@@ -57,7 +57,7 @@ def load() -> pl.DataFrame:
     )
     k = k.sort(["asset", "day"]).with_columns(
         pl.col("quote_vol")
-        .rolling_median(window_size=7, min_periods=7)
+        .rolling_median(window_size=7, min_samples=7)
         .over("asset")
         .alias("liq_med"),
         (pl.col("close") / pl.col("close").shift(1).over("asset") - 1.0).alias("ret"),
@@ -72,7 +72,7 @@ def build_arrays(df: pl.DataFrame, w: int, liq_floor: float):
     """Wide arrays aligned on day index: ret, funding, signal, eligible mask."""
     df = df.with_columns(
         pl.col("funding")
-        .rolling_mean(window_size=w, min_periods=w)
+        .rolling_mean(window_size=w, min_samples=w)
         .over("asset")
         .alias("sig")
     )

@@ -572,6 +572,14 @@ pub fn run_panel_core(
                 if c.is_nan() {
                     continue;
                 }
+                // Inactive cell (e.g. session==0 closed row on a full_calendar
+                // daily panel): no orders may originate here — neither opening
+                // (W there is forced to 0 by validation) nor a flatten of a
+                // carried book. The position is held through the closure and
+                // W resumes control on the next active bar.
+                if !active_mask[idx(ti, a)] {
+                    continue;
+                }
                 let wv = w[idx(ti, a)]; // bias already folded in pre-validation
                 let target_notional = equity * wv; // numeraire
                 let px_num = c * fxv(ti, a);

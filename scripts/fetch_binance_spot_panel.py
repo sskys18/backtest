@@ -141,7 +141,7 @@ def main() -> None:
     # (t,asset) cells become NaN in the wide panel → active_mask=False → excluded.
     long = long.sort(["asset", "timestamp"]).with_columns(
         pl.col("quote_vol")
-        .rolling_median(window_size=LIQ_WINDOW, min_periods=LIQ_WINDOW)
+        .rolling_median(window_size=LIQ_WINDOW, min_samples=LIQ_WINDOW)
         .over("asset")
         .alias("liq_med")
     )
