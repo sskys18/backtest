@@ -266,6 +266,42 @@ def carry_test(df: pl.DataFrame) -> None:
     print(f"\nEW top-20-liq basket: ann.carry={x.mean()*PPY:+.1%}  SR={ann_sharpe(x):.2f}  "
           f"maxDD={max_dd(x):+.1%}  pos%={(x>0).mean():.0%}  days={x.size}")
 
+    conditional_carry_test(x)
+
+
+def conditional_carry_test(x: np.ndarray) -> None:
+    """B'. Regime-gated harvest: in the basket only while trailing funding is
+    rich. Small fixed grid, IS-pick → single-shot OOS (same 70 % split)."""
+    print()
+    print("=" * 72)
+    print("B'. CONDITIONAL CARRY (enter when trailing basket funding > thr)")
+    print("=" * 72)
+    ENTRY_COST = 0.002  # 20 bp round-trip spot+perp legs per regime flip
+    split = int(x.size * IS_FRAC)
+
+    def run(w: int, thr_ann: float):
+        sig = np.convolve(x, np.ones(w) / w, mode="full")[: len(x)]
+        pos = (sig * PPY > thr_ann).astype(float)
+        pos_held = np.concatenate([[0.0], pos[:-1]])
+        flips = np.abs(np.diff(np.concatenate([[0.0], pos_held])))
+        return pos_held * x - flips * ENTRY_COST, pos_held
+
+    results = []
+    print(f"{'w':>3} {'thr':>5}  {'IS_SR':>6} {'IS_ann':>7}")
+    for w in [7, 30]:
+        for thr in [0.05, 0.10, 0.20]:
+            r, pos = run(w, thr)
+            results.append((ann_sharpe(r[:split]), w, thr, r, pos))
+            print(f"{w:>3} {thr:>5.0%}  {ann_sharpe(r[:split]):>6.2f} "
+                  f"{r[:split].mean()*PPY:>+7.1%}")
+    print(f"uncond baseline: IS_SR={ann_sharpe(x[:split]):.2f} "
+          f"IS={x[:split].mean()*PPY:+.1%}  OOS_SR={ann_sharpe(x[split:]):.2f} "
+          f"OOS={x[split:].mean()*PPY:+.1%}")
+    best = max(results, key=lambda t: t[0])
+    _, w, thr, r, pos = best
+    print(f"IS-best: w={w} thr={thr:.0%} -> OOS ann={r[split:].mean()*PPY:+.1%} "
+          f"SR={ann_sharpe(r[split:]):.2f} in-market={pos[split:].mean():.0%}")
+
 
 def main() -> None:
     df = load()

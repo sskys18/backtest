@@ -3,7 +3,10 @@
 > 2026-06-05. Reversal = the shortable mirror of the momentum/surge nulls.
 
 ## Reversal verdict: null.
-Long losers / short winners, 5m, 155 liquid Binance alts, market-neutral perp.
+Long losers / short winners, 5m, 155 liquid Binance alts, market-neutral
+perp-style. (Data note, added post-review: prices are the SPOT 5m panel as a
+perp proxy — shorting assumed perp-side; basis is negligible at 5m and funding
+is not modeled, which FLATTERS the strategy. Still null.)
 - IS sharpe 1.24 (barely fits even in-sample), OOS NET −18.5% (sharpe −8.7), DSR 0.0004.
 - Placebo (random selection, same mechanic): −19.8% ≈ real → NO signal content.
 - 5-fold: 2/5 positive (both ~0%), median −17.2%.

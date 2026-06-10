@@ -18,6 +18,12 @@ an auto-strategy.
   by volume surge, top_k=1, close-trailing stop. 10bps fee + 5bps slip.
 - Controls: single-shot untouched OOS + shuffle placebo (permute volume in time)
   + 5-fold rolling walk-forward with per-fold placebo.
+- Provenance (added post-review): the committed `backtest_screener.py` implements
+  the single-shot OOS + placebo + DSR path. The 5-fold walk-forward and the
+  regime-gate runs below were session-interactive variations of that harness;
+  their driver code was NOT committed — numbers recorded as observed, treat as
+  non-reproducible-from-repo. The verdict does not rest on them alone: the
+  committed single-shot path already shows DSR 0.118 (no edge).
 
 ## Results
 Single-shot OOS (tune IS70% -> freeze -> eval untouched 30%, ~18d):

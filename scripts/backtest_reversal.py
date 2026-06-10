@@ -1,6 +1,10 @@
 #!/usr/bin/env python
-"""Cross-sectional short-term REVERSAL on Binance perp (the shortable mirror of the
-momentum/surge trades that all came back null).
+"""Cross-sectional short-term REVERSAL, perp-style long-short on Binance.
+
+DATA NOTE: prices are the SPOT 5m panel (binance_spot_panel_5m.parquet) used as
+a perp proxy — shorting is assumed perp-side; spot/perp basis is negligible at
+the 5m horizon and does not change a null verdict. Funding not modeled (omitting
+it FLATTERS the strategy; it still nets negative).
 
 Every bar, rank liquid alts by trailing formation return; LONG the biggest losers,
 SHORT the biggest winners (market-neutral), hold `hold` bars. Thesis: intraday
