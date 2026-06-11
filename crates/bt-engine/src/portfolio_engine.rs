@@ -461,6 +461,7 @@ pub fn run_panel_core(
                 &mut bar_turnover,
                 &mut res.trades,
                 open,
+                active_mask,
                 &fxv,
                 cfg,
                 ti,
@@ -572,6 +573,14 @@ pub fn run_panel_core(
                 if c.is_nan() {
                     continue;
                 }
+                // Inactive cell (e.g. session==0 closed row on a full_calendar
+                // daily panel): no orders may originate here — neither opening
+                // (W there is forced to 0 by validation) nor a flatten of a
+                // carried book. The position is held through the closure and
+                // W resumes control on the next active bar.
+                if !active_mask[idx(ti, a)] {
+                    continue;
+                }
                 let wv = w[idx(ti, a)]; // bias already folded in pre-validation
                 let target_notional = equity * wv; // numeraire
                 let px_num = c * fxv(ti, a);
@@ -644,6 +653,7 @@ pub fn run_panel_core(
                 &mut bar_turnover,
                 &mut res.trades,
                 close,
+                active_mask,
                 &fxv,
                 cfg,
                 ti,
@@ -674,6 +684,7 @@ fn drain_fills<F: Fn(usize, usize) -> f64>(
     bar_turnover: &mut f64,
     trades: &mut Vec<TradeRec>,
     price: &[f64],
+    active_mask: &[bool],
     fxv: &F,
     cfg: &PortfolioConfig,
     ti: usize,
@@ -683,7 +694,10 @@ fn drain_fills<F: Fn(usize, usize) -> f64>(
     let pend_now: Vec<(usize, PendingOrder)> = pending.iter().map(|(a, o)| (*a, *o)).collect();
     for (a, ord) in pend_now {
         let raw_px = price[ti * n + a];
-        if raw_px.is_nan() {
+        // NaN price OR inactive cell (closed full_calendar row): the venue is
+        // shut — the order stays pending and fills at the next active bar's
+        // price, exactly like a real exchange queue across a closure.
+        if raw_px.is_nan() || !active_mask[ti * n + a] {
             continue;
         }
         let cur = positions[a];

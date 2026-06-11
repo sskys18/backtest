@@ -164,6 +164,39 @@ def test_full_calendar_with_closed_rows_accepted(tmp_path):
     assert panel.session[1, 0] == 0
 
 
+def test_full_calendar_closed_rows_inactive_on_daily_path(tmp_path):
+    """Codex round-1 (push gate) — C9 at EXECUTION, not just validation.
+
+    Daily path (session_aware=False) never reaches the engine's session
+    force-flat, so a session==0 (closed) row must be inactive: nonzero weight
+    there hard-fails in run_panel instead of silently trading a closed day.
+    """
+    assets = ["A"]
+    ts = [1000, 2000, 3000]
+    rows = _base_rows(assets, ts)
+    rows[1]["session"] = 0
+    path = _write(pl.DataFrame(rows), tmp_path)
+    panel = load_panel(
+        path, bar_freq="1d", session_aware=False, funding=True, calendar="full_calendar"
+    )
+    assert panel.active_mask[0, 0] and panel.active_mask[2, 0]
+    assert not panel.active_mask[1, 0]  # closed row untradable
+
+
+def test_intraday_closed_rows_stay_active(tmp_path):
+    """session_aware=True path: engine session force-flat owns closed rows;
+    the loader must NOT mask them (force-flat needs the cell active to exit)."""
+    assets = ["A"]
+    ts = [1000, 2000, 3000]
+    rows = _base_rows(assets, ts)
+    rows[0]["session"] = 1
+    rows[1]["session"] = 0
+    rows[2]["session"] = 4
+    path = _write(pl.DataFrame(rows), tmp_path)
+    panel = load_panel(path, bar_freq="1h", session_aware=True, funding=True)
+    assert panel.active_mask.all()
+
+
 def test_unknown_calendar_policy_rejected(tmp_path):
     """Codex round-1 — calendar is an enum; a typo must NOT silently bypass C9."""
     rows = _base_rows(["A"], [1000, 2000])

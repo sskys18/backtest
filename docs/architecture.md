@@ -17,7 +17,7 @@ Three workflows: **Panel Quant Engine** (general multi-asset cross-sectional / l
 │                                                             │
 │  ┌──────────┐   ┌───────────┐   ┌──────────┐   ┌────────┐ │
 │  │ bt data  │──▶│bt features│──▶│bt backtest│──▶│bt report│ │
-│  │  fetch   │   │   build   │   │  / train  │   │        │ │
+│  │  import  │   │   build   │   │  / train  │   │        │ │
 │  └────┬─────┘   └─────┬─────┘   └────┬─────┘   └────────┘ │
 │       │               │              │                      │
 │       ▼               ▼              ▼                      │
@@ -30,8 +30,9 @@ Three workflows: **Panel Quant Engine** (general multi-asset cross-sectional / l
 │  replay/           (vectorized     (load data, run strategy, │
 │  rl/               Polars)          call Rust, save results) │
 ├─────────────────────────────────────────────────────────────┤
-│  Data: IMPORT-ONLY (bt data import → parquet store)         │
-│  Fetching removed; siblings korea-stock / upbit produce it  │
+│  Core data: IMPORT-ONLY (bt data import → parquet store)    │
+│  Siblings korea-stock / upbit produce it; one-off research  │
+│  fetchers live under scripts/ only (never in bt.data)       │
 ├─────────────────────────────────────────────────────────────┤
 │                   Rust Engine (crates/bt-engine/)            │
 │                                                             │

@@ -947,3 +947,99 @@ fn session_force_flat_intraday() {
     let flat = r.trades.iter().any(|tr| tr.bar == 3 && (tr.qty + 1000.0).abs() < 1e-6);
     assert!(flat, "expected session-flat trade at t3, trades={:?}", r.trades.iter().map(|t|(t.bar,t.qty)).collect::<Vec<_>>());
 }
+
+// ---------------------------------------------------------------------------
+// C9 execution: closed (inactive) rows on the daily path
+// ---------------------------------------------------------------------------
+
+#[test]
+fn inactive_closed_row_holds_position_no_forced_roundtrip() {
+    // Codex push-gate: full_calendar daily panel — a session==0 closed row is
+    // INACTIVE (loader) and W there is 0. The engine must NOT originate orders
+    // on the closed bar (no flatten of the carried book, no re-open after):
+    // exactly ONE trade (the initial open) over the whole run.
+    let mut c = cfg();
+    c.leverage_cap = 1.0;
+    c.max_net = 1.0;
+    c.max_per_asset = 1.0;
+    let close = [100.0, 100.0, 100.0, 100.0, 100.0];
+    let open = [100.0, 100.0, 100.0, 100.0, 100.0];
+    let fund = [0.0; 5];
+    let fx = [1.0; 5];
+    // t2 = closed day: inactive, session 0, W forced 0. Active resumes t3 W=1.
+    let w = [1.0, 1.0, 0.0, 1.0, 1.0];
+    let active = [true, true, false, true, true];
+    let sessions = [2u8, 2, 0, 2, 2];
+    let dt: Vec<i64> = (0..5).collect();
+    let r = run_panel_core(
+        &["A".into()],
+        5,
+        1,
+        &close,
+        &open,
+        &fund,
+        &fx,
+        &w,
+        &active,
+        &sessions,
+        &dt,
+        &c,
+        None,
+        None,
+        BiasMode::Forbidden,
+    )
+    .unwrap();
+    assert_eq!(
+        r.trades.len(),
+        1,
+        "closed bar must not force a flatten/re-open round-trip, trades={:?}",
+        r.trades.iter().map(|t| (t.bar, t.qty)).collect::<Vec<_>>()
+    );
+    assert_eq!(r.trades[0].bar, 1, "only the initial open fill at t1");
+}
+
+#[test]
+fn pending_order_defers_across_inactive_closed_bar() {
+    // Order enqueued at the last active bar before a closure must NOT fill at
+    // the closed bar's open — it stays queued and fills at the reopen, like a
+    // real exchange order book across a holiday.
+    let mut c = cfg();
+    c.leverage_cap = 1.0;
+    c.max_net = 1.0;
+    c.max_per_asset = 1.0;
+    let close = [100.0, 100.0, 100.0, 100.0, 100.0];
+    let open = [100.0, 100.0, 100.0, 100.0, 100.0];
+    let fund = [0.0; 5];
+    let fx = [1.0; 5];
+    // W=1 first wanted at t1 → order enqueued t1, would fill open[2] — but t2
+    // is closed/inactive → must fill at open[3] instead.
+    let w = [0.0, 1.0, 0.0, 1.0, 1.0];
+    let active = [true, true, false, true, true];
+    let sessions = [2u8, 2, 0, 2, 2];
+    let dt: Vec<i64> = (0..5).collect();
+    let r = run_panel_core(
+        &["A".into()],
+        5,
+        1,
+        &close,
+        &open,
+        &fund,
+        &fx,
+        &w,
+        &active,
+        &sessions,
+        &dt,
+        &c,
+        None,
+        None,
+        BiasMode::Forbidden,
+    )
+    .unwrap();
+    assert_eq!(
+        r.trades.len(),
+        1,
+        "exactly one fill, deferred past the closed bar, trades={:?}",
+        r.trades.iter().map(|t| (t.bar, t.qty)).collect::<Vec<_>>()
+    );
+    assert_eq!(r.trades[0].bar, 3, "fill must land on the reopen bar, not the closed one");
+}

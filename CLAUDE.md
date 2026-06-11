@@ -88,7 +88,7 @@ Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit p
 
 - Rust crate uses feature `python` for PyO3 bindings (off by default for `cargo test`)
 - PyO3 0.28 / numpy 0.28 for Python 3.14
-- Import-only: data fetching removed; siblings (korea-stock / upbit) produce parquet, `bt data import` ingests it
+- Import-only **core**: `src/bt/data/` never fetches; siblings (korea-stock / upbit) produce parquet, `bt data import` ingests it. One-off experiment fetchers live under `scripts/` only (throwaway, not wired into `bt.data`)
 - Polars for DataFrames, NumPy only at Rust boundary
 - Strategies return `strength` + `target_size` columns
 - All data stored as Parquet under `data/raw/{source}/{pair}/{type}/`
