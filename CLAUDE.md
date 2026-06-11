@@ -79,10 +79,13 @@ Replays bot scan events against 1min OHLCV bars, tests all entry filter + exit p
 - `src/bt/` — Python package (cli, config, data, features, strategy, backtest, report, experiment, optimize, rl)
 - `src/bt/data/` — Import-only data layer (import_, store, validate, schemas). No fetching — siblings own that.
 - `src/bt/rl/` — PPO reinforcement learning (env, train, policy_strategy)
+- `src/bt/scanners/` — 7 live web-scanner ports (kimp_wave, squeeze_hunter, …) + Optuna tune CLI; see `docs/scanners.md`
 - `configs/` — YAML strategy configs (incl. `configs/panel/` reference panel configs)
-- `tests/python/` — Python tests (163 tests)
-- `experiments/` — goals.md + replay results + run artifacts
-- `data/raw/` — Parquet data store (gitignored)
+- `tests/python/` — Python tests (165 tests)
+- `scripts/live/` — standing tools (heat_screener, divergence alert + plist, scanner feature builder)
+- `scripts/experiments/` — one-off frozen fetcher/backtest pairs for the alpha ledger
+- `experiments/` — **README.md = alpha ledger** (every investigation + verdict), date-stamped immutable reports, goals.md, archive/
+- `data/raw/` — Parquet data store (gitignored); `data/raw/README.md` = per-panel reproduction commands
 
 ## Key Conventions
 

@@ -60,10 +60,10 @@ For the four APPROXIMATION scanners (`alpha_hunter`, `alpha_terminal`, `nahonja`
 
 ```bash
 # Degraded (liq stub = 0; squeeze_hunter cannot signal):
-python scripts/build_btc_scanner_features.py
+python scripts/live/build_btc_scanner_features.py
 
 # Full (real CoinAnk liquidations forward-filled to 5m bars):
-python scripts/build_btc_scanner_features.py --with-liq
+python scripts/live/build_btc_scanner_features.py --with-liq
 ```
 
 The `--with-liq` mode requires CoinAnk to be reachable (no 403 cooldown). The script auto-falls-back to zero-stub if CoinAnk returns empty.

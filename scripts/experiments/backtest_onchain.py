@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from bt.panel.stats import deflated_sharpe_ratio, pbo as cscv_pbo  # noqa: E402
 
 ONCHAIN_PQ = Path("data/raw/coinmetrics_onchain_1d.parquet")

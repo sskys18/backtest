@@ -13,7 +13,7 @@ an auto-strategy.
 ## Setup
 - Data: 5m 60d panel, 155 liquid Binance-spot alts (deepest intraday w/ volume;
   OI piece untestable — free OI caps at 21d).
-- `BreakoutStrategy` (`scripts/backtest_screener.py`): long the strongest coin
+- `BreakoutStrategy` (`scripts/experiments/backtest_screener.py`): long the strongest coin
   making a new `hi_lookback`-bar high on volume >= `vol_mult` x baseline, ranked
   by volume surge, top_k=1, close-trailing stop. 10bps fee + 5bps slip.
 - Controls: single-shot untouched OOS + shuffle placebo (permute volume in time)

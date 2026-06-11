@@ -9,7 +9,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/zsh</string>
-    <string>/Users/sskys/Mine/backtest/scripts/run_divergence_alert.sh</string>
+    <string>/Users/sskys/Mine/backtest/scripts/live/run_divergence_alert.sh</string>
   </array>
 
   <!-- 월~금(1~5) 08:55 기동. 바이너리가 15:40 후 self-exit. -->

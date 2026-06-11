@@ -18,7 +18,7 @@ loses → conclusive per the pre-registered interpretation rule.
 - **Strategy:** `CrossSectionalStrategy` lookback=30, top_k=10, bottom_k=0
   (long-only), equal weight, weekly rebalance, 10bps fee + 5bps slippage.
 - **Configs:** `configs/panel/binance_alt_vs_btc_daily.yaml`; fetch
-  `scripts/fetch_binance_spot_panel.py`; run `scripts/run_alt_vs_btc.py`.
+  `scripts/experiments/fetch_binance_spot_panel.py`; run `scripts/experiments/run_alt_vs_btc.py`.
 
 ## Results (NET of fees)
 | metric | BASKET | BTC buy-hold | winner |

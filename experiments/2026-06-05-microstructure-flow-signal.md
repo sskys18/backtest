@@ -17,7 +17,7 @@ changes returns. Plus the data is structurally too thin to confirm anything.
   Historical intraday microstructure is NOT freely available at depth; it must be
   collected live going forward (this is why the repo has the scan-replay lineage).
 - **Used 1h** (deepest: 500 bars / 21 days, 50 alts).
-- **Strategy** (`MicroStrategy`, `scripts/search_micro_signal.py`): per bar long the
+- **Strategy** (`MicroStrategy`, `scripts/experiments/search_micro_signal.py`): per bar long the
   strongest firing alt by order-flow (taker / oi_mom / combo), close-trailing stop,
   hold ≤8h. Perp fees 4bps + 2bps slip.
 - **Harness:** single-shot untouched OOS (tune IS 70% → freeze 1 → eval OOS 30%) +
