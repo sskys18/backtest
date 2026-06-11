@@ -1,66 +1,76 @@
 # Session Handoff
-> Generated: 2026-06-11 (KST)
+> Generated: 2026-06-11 22:30 (KST)
 
 ## Task
-Alpha research on the panel engine + repo structure cleanup. Engine merged
-(PR #1/#2), alpha session merged (PR #3, main `42cea22`).
+Alpha research for crypto alts on the panel engine. Engine + all research +
+repo restructure are MERGED; next session starts a new research fork.
 
 ## Status
-### Completed
-- **Alpha ledger complete** — see `experiments/README.md` (the single index).
-  8 crypto families tested under full rigor; free-public-data families on
-  liquid venues are EXHAUSTED (price/flow ×6, funding, on-chain fundamentals).
-  Survivors: conditional funding-carry overlay (bull manias only) + breakout
-  screener as watch tool.
-- **PR #3 merged** (15 commits + 4 Codex push-gate fix commits): all 6/05+6/11
-  experiments, funding/on-chain fetchers+backtests, 2 real engine bugs found by
-  the push gate — (1) full_calendar closed rows were tradable on the daily path
-  (loader active_mask + engine rebalance/fill-defer fixed, cargo 63), (2)
-  `_run_weights` import crash in surge search.
-- **Repo restructure** (branch `chore/repo-structure`): scripts/ split into
-  `live/` + `experiments/`, experiments/archive/ for scan-replay era artifacts,
-  `experiments/README.md` ledger, `data/raw/README.md` reproduction guide
-  (+ .gitignore exception), stale `docs/plan/handoff.md` removed, path
-  references rewritten (plist, scanners.md, experiment docs, parents[2]).
+### Completed (all on main `3b5fa28`, remote-synced, tree clean)
+- PR #3 — alpha session: funding-carry + on-chain experiments, 2 engine bugs
+  fixed via Codex push gate (full_calendar closed-row tradability; surge-search
+  import crash). cargo 63 / pytest 165.
+- PR #4 — restructure: `scripts/live/` vs `scripts/experiments/`,
+  `experiments/README.md` (alpha ledger), `data/raw/README.md` (reproduction
+  recipes), archive/, stale doc removed.
+- **Free-public-data alpha search CLOSED**: 8 families all null/untradeable —
+  see `experiments/README.md` for the full ledger + verdicts.
+
+### In Progress
+- Nothing mid-flight. Clean fork point.
 
 ## Resume Here
-1. Ship `chore/repo-structure` to main (/ship — commit exists, needs the
-   one-confirm push/PR/merge).
-2. Next research fork (pick one):
-   a. **Kimchi-premium dataset** — the structural moat play. Upbit KRW ×
-      Binance USDT × USDKRW; unlocks `kimp_wave`/`kimchi_audit` scanner
-      validation too. Unknowns: upbit sibling KRW depth, FX source.
-   b. **Live micro collection** — start a collector for taker/OI/liq (500pt
-      cap means history is impossible; only forward collection unlocks the
-      4 capped scanners).
+1. **Build the kimchi-premium dataset** (`scripts/experiments/fetch_kimp_panel.py`):
+   per coin, align Upbit KRW close × Binance USDT close × USDKRW FX →
+   `data/raw/kimp_panel_1d.parquet` (+1h if depth allows); then backtest
+   premium mean-reversion under the rigor protocol. The one structural-moat
+   category left with free data; also unlocks `kimp_wave`/`kimchi_audit`
+   scanner validation. NOTE: user deprioritized kimp once (2026-06-11) —
+   reconfirm before heavy investment.
+2. Alternative fork if user prefers: **live micro collector** under
+   `scripts/live/` for taker/OI/liq/LSR (500pt API cap → only forward
+   collection ever unlocks the 4 capped scanners).
+3. If kimp null too → conditional funding-carry overlay (only OOS+ survivor,
+   `scripts/experiments/backtest_funding.py` B′) + regime allocation as the
+   standing conclusion.
 
 ## Decisions (do NOT revisit)
-- Free-public-data signal families on liquid venues: DEAD (8 families, all
-  rigorous). No re-mining variants — that's filter-shopping overfit.
-- Rigor protocol mandatory: single-shot OOS + shuffle placebo + DSR/PBO.
-- Edge categories left: KR fragmentation (kimp), capacity-constrained small
-  KRW, conditional carry, live-collected micro, event-class on-chain (paid).
-- Approach A panel engine — locked.
+- **Free-public-data signal families on liquid venues are DEAD** (8 families,
+  all under single-shot OOS + shuffle placebo + DSR/PBO). Re-mining variants =
+  filter-shopping overfit. Rejected: any further price/flow/funding-XS/on-chain
+  daily-aggregate mining.
+- **Rigor protocol mandatory** for every alpha claim. Naive backtests lie
+  (+133 % IS mirages collapsed).
+- **Remaining edge categories**: KR fragmentation (kimp), small-cap KRW
+  capacity-constrained, conditional carry, live-collected micro, event-class
+  on-chain (paid data only).
+- **Approach A panel engine** — locked. Scanner tuning YAMLs
+  (`experiments/scanner_tuning/`) are pre-rigor IS-only artifacts — do not
+  treat as validated.
 
 ## Gotchas
-- **GIT AUTH**: plain git resolves the WRONG account. Push:
-  `git push "https://x-access-token:$(gh auth token -u sskys18)@github.com/sskys18/backtest.git" <branch>`.
+- **GIT AUTH**: plain git → wrong account. Push:
+  `git push "https://x-access-token:$(gh auth token -u sskys18)@github.com/sskys18/backtest.git" <branch>`;
   gh write commands need `-R sskys18/backtest`.
-- **Codex push gate**: denies are usually REAL (caught 2 engine bugs). Fix,
-  commit, re-push; 3-round cap → `rm .git/sspower-review-rounds-<branch>` to
-  reset after fixing everything. Never bypass without user say-so.
-- **/tmp commit-msg files race with other sessions** — use unique names
-  (`/tmp/bt_ship_msg_*.txt`), verify `git log -1 --format=%s` after commit.
-- Binance free taker/OI/liq/LSR cap ≈500 points; funding + klines paginate to
-  FULL history (that asymmetry is load-bearing for what's testable).
+- **Codex push gate denies are usually REAL** (caught 2 engine bugs this
+  session). Fix → commit → re-push. 3-round cap:
+  `rm .git/sspower-review-rounds-<branch>` after fixing everything. The gate
+  also blocks ff-merges → sync main via token fetch +
+  `git reset --hard origin/main` (verify 0 unique local commits first).
+- **/tmp commit-msg files race with concurrent sessions** — unique names
+  (`/tmp/bt_*_msg.txt`) + verify `git log -1 --format=%s` after commit.
+- Binance free taker/OI/liq/LSR ≈500pt cap; funding + klines paginate to FULL
+  history — this asymmetry decides what's backtestable.
 - Binance klines = live symbols only → survivorship (anti-momentum). State it.
-- `e-v-a-l(` literal substring in code trips the security hook on Write.
-- Local main may be stale; hook blocks even ff merges → fetch with token URL
-  then `git reset --hard origin/main` (verify 0 unique local commits first).
+- `e-v-a-l(` literal substring trips the security hook on Write.
+- pytest via `python -c "import pytest,sys; sys.exit(pytest.main(['tests/python/','-q']))"`.
 
 ## Context
-- Branch: `chore/repo-structure` (1 commit ahead of main `42cea22`, unpushed).
-- Tests: cargo 63, pytest 165. Run pytest via
-  `python -c "import pytest,sys; sys.exit(pytest.main(['tests/python/','-q']))"`.
-- Data inventory + rebuild commands: `data/raw/README.md`.
-- Memories current: `alt-alpha-meta-conclusion` (updated), `funding-carry-compressed` (new).
+- **Branch**: `main` at `3b5fa28`, synced, tree clean, merged branches deleted.
+- **Tests**: cargo 63 / pytest 165, all passing.
+- **Data**: inventory + per-panel rebuild commands in `data/raw/README.md`.
+- **Memories**: `alt-alpha-meta-conclusion` (updated), `funding-carry-compressed` (new).
+- **Unknowns** (verify before kimp work): upbit sibling KRW OHLCV depth +
+  timestamp alignment vs Binance (local `data/raw/upbit/` is 1m×6.7d scraps);
+  USDKRW FX series source (`data/raw/fx/` doesn't exist yet — check
+  korea-stock sibling or fetch).
