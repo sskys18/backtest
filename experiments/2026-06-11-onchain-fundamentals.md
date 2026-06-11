@@ -13,7 +13,7 @@ Three hypotheses, directions FIXED ex-ante (no sign mining):
 
 ## Data
 
-- `scripts/fetch_coinmetrics_onchain.py` — CoinMetrics **community** API
+- `scripts/experiments/fetch_coinmetrics_onchain.py` — CoinMetrics **community** API
   (free, keyless): `AdrActCnt, TxCnt, TxTfrCnt, CapMVRVCur, CapMrktCurUSD,
   FeeTotNtv`, daily, 2019-01 → 2026-06.
 - Coverage caveat: community tier ∩ Binance perps = **34 assets, majors only**
@@ -23,7 +23,7 @@ Three hypotheses, directions FIXED ex-ante (no sign mining):
 
 ## Method
 
-`scripts/backtest_onchain.py` — same engine as the funding test: daily
+`scripts/experiments/backtest_onchain.py` — same engine as the funding test: daily
 dollar-neutral quantile portfolio on USDT perps, PnL = price − funding paid −
 7 bp/side turnover. IS 70 % grid (4 signals × q∈{.2,.3} = 8 configs) →
 single-shot OOS, shuffle placebo ×200, DSR, CSCV PBO. Extra check: daily
@@ -67,5 +67,5 @@ inflows) which is a different data class than daily aggregates.
 
 ## Files
 
-- `scripts/fetch_coinmetrics_onchain.py`, `scripts/backtest_onchain.py`
+- `scripts/experiments/fetch_coinmetrics_onchain.py`, `scripts/experiments/backtest_onchain.py`
 - `data/raw/coinmetrics_onchain_1d.parquet` (gitignored)

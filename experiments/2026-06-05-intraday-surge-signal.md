@@ -13,7 +13,7 @@ Fees are not the killer — generalization failure is.
 ## Setup
 - **Data:** Binance spot 5m, 155 liquid alts ($20M rolling-24h floor), BTC held
   out. 2026-04-07 → 2026-06-05 (60d, 16,997 bars). Median 21 liquid alts/bar.
-- **Strategy** (`SurgeStrategy`, in `scripts/search_surge_signal.py`): per bar,
+- **Strategy** (`SurgeStrategy`, in `scripts/experiments/search_surge_signal.py`): per bar,
   when a signal fires go long the single strongest firing alt (top_k=1, info≤t),
   ride a CLOSE-resolution trailing stop until stop trips or max_hold elapses.
   Long-only, next-bar-open fills, 10bps fee + 5bps slippage.

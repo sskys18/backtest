@@ -11,8 +11,9 @@ __pycache__/
 dist/
 build/
 
-# Data (large files)
-data/raw/
+# Data (large files) — but keep the reproduction guide
+data/raw/*
+!data/raw/README.md
 data/records/
 data/features/
 

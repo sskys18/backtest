@@ -14,7 +14,7 @@ already proven null. Two tests:
 
 ## Data
 
-- `scripts/fetch_binance_funding_panel.py` — **full-depth** funding history
+- `scripts/experiments/fetch_binance_funding_panel.py` — **full-depth** funding history
   (unlike taker/OI's 500-point cap, `/fapi/v1/fundingRate` paginates to listing
   date; verified BTCUSDT from 2020-01-01). 530 USDT perpetuals, 1.90M funding
   events, 2019-09 → 2026-06. Plus daily perp klines (426k bars).
@@ -24,7 +24,7 @@ already proven null. Two tests:
 
 ## Method (rigor per protocol)
 
-`scripts/backtest_funding.py`. IS = first 70 % (2019-09→2024-06), single-shot
+`scripts/experiments/backtest_funding.py`. IS = first 70 % (2019-09→2024-06), single-shot
 OOS = last 30 % (2024-06→2026-06). Grid (IS only): W∈{3,7,14,30} × q∈{.1,.2} ×
 liq-floor∈{5M,20M} = 16 configs. Costs 7 bp/side/turnover. Within-day shuffle
 placebo ×200, DSR deflated by all 16 trials, CSCV PBO (16 splits).
@@ -86,7 +86,7 @@ per regime flip. Small grid {7,30}×{5,10,20 %}, same IS/OOS split:
 
 ## Files
 
-- `scripts/fetch_binance_funding_panel.py` — funding + perp-klines fetcher
-- `scripts/backtest_funding.py` — tests A and B
+- `scripts/experiments/fetch_binance_funding_panel.py` — funding + perp-klines fetcher
+- `scripts/experiments/backtest_funding.py` — tests A and B
 - `data/raw/binance_funding_panel.parquet`, `binance_perp_panel_1d.parquet`
   (gitignored)
